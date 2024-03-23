@@ -1,0 +1,7 @@
+LFW: http://vis-www.cs.umass.edu/lfw/lfw.tgz
+
+https://www.kaggle.com/datasets/xhlulu/140k-real-and-fake-faces
+
+https://www.kaggle.com/datasets/dullaz/1m-ai-generated-faces-128x128?resource=download
+
+Put each dataset into its own folder I guess
