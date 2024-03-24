@@ -1,7 +1,15 @@
-LFW: http://vis-www.cs.umass.edu/lfw/lfw.tgz
+Other potential datasets:
 
-https://www.kaggle.com/datasets/xhlulu/140k-real-and-fake-faces
+# Contains links to a variety of facial datasets
+https://imerit.net/blog/5-million-faces-top-14-free-image-datasets-for-facial-recognition-all-pbm/
 
+# 1M 128x128 AI generated faces, probably not needed since we have the other big AI dataset.
 https://www.kaggle.com/datasets/dullaz/1m-ai-generated-faces-128x128?resource=download
 
-Put each dataset into its own folder I guess
+# More real images, but these aren't aligned like the others and may cause distribution shift
+https://drive.google.com/drive/folders/1HROmgviy4jUUUaCdvvrQ8PcqtNg2jn3G
+
+# These may be useful, but they look webscraped, of various resolution and some have watermarks lmao
+https://www.kaggle.com/datasets/abhikjha/utk-face-cropped
+
+Put each dataset into its own folder and include a download.txt with the link the data can be downloaded.
