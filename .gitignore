@@ -2,3 +2,4 @@ datasets/**/*.jpg
 **/*.tar
 **/*.zip
 **/*.pyc
+**/*DS_Store

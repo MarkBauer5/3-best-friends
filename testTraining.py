@@ -1,5 +1,4 @@
 import torch, os
-from torchvision import datasets, transforms
 from PIL import Image
 from torch.utils.data import DataLoader, Dataset
 import torchvision.transforms.v2 as v2
@@ -36,6 +35,7 @@ class TestDataset(Dataset):
 
 
 # Define transformations
+# REMEMBER TO FUCKING NORMALIZE THIS SHIT OR IT WILL BE HYPER MEGA ASS
 transform = v2.Compose([
     v2.Resize((224, 224)),  # Resize images to fit Swin Transformer input dimensions
     v2.ToImage(), 
