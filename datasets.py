@@ -1,6 +1,6 @@
 import torch, os
 from PIL import Image
-from torch.utils.data import Dataset
+from torch.utils.data import Dataset, Subset, DataLoader, WeightedRandomSampler
 import torchvision.transforms.v2 as v2
 import csv
 
@@ -254,11 +254,36 @@ class RealVsFake2k(Dataset):
     
 def main():
     
-    # Debug dataset initalization and setup here 
-    newTest = RealVsFake2k()
+    from collections import defaultdict
     
-    print('SWAGA')
+    # Debug dataset initialization and setup here
+
+    testDataset = RealVsFake140k(transform=DEFAULT_INITIAL_TRANSFORM, split='train')
+
+    randomIndices = torch.randint(0, 99999, (2000,))
+    print(randomIndices)
+    subsetSampling = Subset(testDataset, indices=randomIndices)
     
+    fullLoader = DataLoader(testDataset, batch_size=1, shuffle=True)
+    subsetLoader = DataLoader(subsetSampling, batch_size=1, shuffle=True)
+    
+    
+    d = defaultdict(int)
+    for idx, (feature, label) in enumerate(fullLoader): 
+        if idx > 2000:
+            break
+        
+        d[int(label[0])] += 1
+    print(d)
+    
+    
+    d = defaultdict(int)
+    for idx, (feature, label) in enumerate(subsetLoader):
+        if idx > 2000:
+            break
+        
+        d[int(label[0])] += 1
+    print(d)
     
 if __name__ == '__main__':
     main()
