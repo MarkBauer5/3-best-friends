@@ -3,7 +3,7 @@ from PIL import Image
 from torch.utils.data import DataLoader, Dataset, Subset
 import torchvision.transforms.v2 as v2
 from datasets import RealVsFake140k, DEFAULT_INITIAL_TRANSFORM
-
+from tqdm import tqdm
 
 # Define transformations
 # REMEMBER TO FUCKING NORMALIZE THIS SHIT OR IT WILL BE HYPER MEGA ASS
@@ -11,13 +11,15 @@ transform = DEFAULT_INITIAL_TRANSFORM
 
 DATA_PATH = r'datasets\\tempDataset'
 BATCH_SIZE = 64
+NUM_EPOCHS = 3
+
 
 # Download and prepare datasets
 trainset = RealVsFake140k(transform=transform, split='train')
 valset =  RealVsFake140k(transform=transform, split='valid')
 
-trainset = Subset(trainset, indices=torch.randint(0, 49999, (4000,)))
-valset = Subset(valset, indices=torch.randint(0, 9999, (4000,)))
+# trainset = Subset(trainset, indices=torch.randint(0, 100000, (4000,)))
+# valset = Subset(valset, indices=torch.randint(0, 20000, (4000,)))
 
 # Dataloaders
 trainloader = torch.utils.data.DataLoader(trainset, batch_size=BATCH_SIZE, shuffle=True)
@@ -44,10 +46,16 @@ criterion = nn.CrossEntropyLoss()
 optimizer = optim.Adam(model.parameters(), lr=0.001)
 
 # Training loop
-for epoch in range(10):  # Number of epochs
+
+
+for epoch in range(NUM_EPOCHS):
     model.train()
     running_loss = 0.0
-    for images, labels in trainloader:
+    
+    pbar = tqdm(range(len(trainloader)))
+    for batchNum in pbar:
+        
+        images, labels = next(iter(trainloader))
         images, labels = images.to(device), labels.to(device)
 
         optimizer.zero_grad()
@@ -58,6 +66,9 @@ for epoch in range(10):  # Number of epochs
         optimizer.step()
 
         running_loss += loss.item()
+        
+        pbar.set_description("loss: {:.6f}".format(loss), refresh=True)
+
 
     print(f"Epoch {epoch+1}, Loss: {running_loss/len(trainloader)}")
 
