@@ -1,28 +1,27 @@
 import torch, os
 from PIL import Image
-from torch.utils.data import DataLoader, Dataset
+from torch.utils.data import DataLoader, Dataset, Subset
 import torchvision.transforms.v2 as v2
-from datasets import RealVsFake140k
+from datasets import RealVsFake140k, DEFAULT_INITIAL_TRANSFORM
 
 
 # Define transformations
 # REMEMBER TO FUCKING NORMALIZE THIS SHIT OR IT WILL BE HYPER MEGA ASS
-transform = v2.Compose([
-    v2.Resize((224, 224)),  # Resize images to fit Swin Transformer input dimensions
-    v2.ToImage(), 
-    v2.ToDtype(torch.float32, scale=True)]
-)
+transform = DEFAULT_INITIAL_TRANSFORM
 
 DATA_PATH = r'datasets\\tempDataset'
 BATCH_SIZE = 64
 
 # Download and prepare datasets
-trainset = RealVsFake140k(DATA_PATH, transform=transform)
-testset = None
+trainset = RealVsFake140k(transform=transform, split='train')
+valset =  RealVsFake140k(transform=transform, split='valid')
+
+trainset = Subset(trainset, indices=torch.randint(0, 49999, (4000,)))
+valset = Subset(valset, indices=torch.randint(0, 9999, (4000,)))
 
 # Dataloaders
 trainloader = torch.utils.data.DataLoader(trainset, batch_size=BATCH_SIZE, shuffle=True)
-testloader = torch.utils.data.DataLoader(testset, batch_size=BATCH_SIZE, shuffle=False)
+valLoader = torch.utils.data.DataLoader(valset, batch_size=BATCH_SIZE, shuffle=False)
 
 import timm
 import torch.nn as nn
@@ -68,7 +67,7 @@ correct = 0
 total = 0
 model.eval()  # Set model to evaluation mode
 with torch.no_grad():
-    for images, labels in testloader:
+    for images, labels in valLoader:
         images, labels = images.to(device), labels.to(device)
         outputs = model(images)
         _, predicted = torch.max(outputs.data, 1)

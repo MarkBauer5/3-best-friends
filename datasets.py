@@ -17,8 +17,10 @@ import csv
 # TODO: FUCKING NORMALIZE PER DATASET DURING TRAINING
 DEFAULT_INITIAL_TRANSFORM = v2.Compose([
     v2.Resize((224, 224)),  # Resize images to fit Swin Transformer input dimensions
-    v2.ToImage(), 
-    v2.ToDtype(torch.float32, scale=True)]
+    v2.ToImage(),
+    v2.ToDtype(torch.float32, scale=True),
+    v2.Normalize((0.5,), (0.5,))
+    ]
 )
 
 
