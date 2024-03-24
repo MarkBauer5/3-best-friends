@@ -14,13 +14,12 @@ import csv
 # TODO: Find a way to merge all these different datasets together, we really want one big dataset
 #   comprised of all the individual datasets.
 
-# TODO: FUCKING NORMALIZE PER DATASET
-transform = v2.Compose([
+# TODO: FUCKING NORMALIZE PER DATASET DURING TRAINING
+DEFAULT_INITIAL_TRANSFORM = v2.Compose([
     v2.Resize((224, 224)),  # Resize images to fit Swin Transformer input dimensions
     v2.ToImage(), 
     v2.ToDtype(torch.float32, scale=True)]
 )
-
 
 
 """
@@ -29,7 +28,7 @@ Data should have label 1 if it's real, 0 if fake.
 BASIC INTERFACE:
 """
 
-class CustomInterface(Dataset):
+class ExampleDatasetInterface(Dataset):
     
     """
     A special Dataset class for reading the <DATASET>
@@ -42,7 +41,7 @@ class CustomInterface(Dataset):
         super().__init__()
         
         self.transform = transform
-        self.dataPath = CustomInterface.DATA_PATH
+        self.dataPath = ExampleDatasetInterface.DATA_PATH
         
         assert split in ['train', 'valid', 'test'], 'You dense fucking dumbass, you stupid fucking cretin. (Check split name)'
         self.split = split

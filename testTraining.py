@@ -2,36 +2,7 @@ import torch, os
 from PIL import Image
 from torch.utils.data import DataLoader, Dataset
 import torchvision.transforms.v2 as v2
-
-
-class TestDataset(Dataset):
-    def __init__(self, data_path, transform=None):
-        super().__init__()
-        self.data_path = data_path
-        self.transform = transform
-        self.annotations = self._load_annotations()
-
-    def _load_annotations(self):
-        annotations = []
-        for subfolder in ['real', 'fake']:
-            subfolder_path = os.path.join(self.data_path, subfolder)
-            for root, _, files in os.walk(subfolder_path):
-                for file in files:
-                    if file.endswith('.jpg'):
-                        image_path = os.path.join(root, file)
-                        label = 1 if subfolder == 'real' else 0
-                        annotations.append((image_path, label))
-        return annotations
-
-    def __len__(self):
-        return len(self.annotations)
-
-    def __getitem__(self, index):
-        image_path, label = self.annotations[index]
-        image = Image.open(image_path).convert('RGB')
-        if self.transform is not None:
-            image = self.transform(image)
-        return image, label
+from datasets import RealVsFake140k
 
 
 # Define transformations
@@ -46,7 +17,7 @@ DATA_PATH = r'datasets\\tempDataset'
 BATCH_SIZE = 64
 
 # Download and prepare datasets
-trainset = TestDataset(DATA_PATH, transform=transform)
+trainset = RealVsFake140k(DATA_PATH, transform=transform)
 testset = None
 
 # Dataloaders
