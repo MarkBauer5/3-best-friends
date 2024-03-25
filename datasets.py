@@ -148,6 +148,10 @@ class RealVsFake140k(Dataset):
     LABELS_PATH = r'datasets\140k Real vs Fake'
     VALID_SPLITS = ['train', 'valid', 'test']
     
+    TRAIN_SIZE = 100000
+    VALID_SIZE = 20000
+    TEST_SIZE = 20000
+    
     def __init__(self, transform=None, split='train') -> None:
         super().__init__()
         
