@@ -3,3 +3,4 @@ datasets/**/*.jpg
 **/*.zip
 **/*.pyc
 **/*DS_Store
+CollectedData/Models/**
