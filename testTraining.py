@@ -3,15 +3,16 @@ import torch.nn as nn
 from torch.utils.data import Subset, DataLoader
 from datasets import RealVsFake140k, DEFAULT_INITIAL_TRANSFORM
 from tqdm import tqdm
-from models import swinModel, vitModel
+from models import swinModel, vitModel, testCNN1, DWSConvNet1
 import time
 import os
 from collections import defaultdict
+import torchinfo
 
 from tensorboardX import SummaryWriter
 
 
-# TODO: Make sure training actually works, I think it does but I didn't do a full eval
+# TODO: Learning rate collapse should end training, after 
 # TODO: Move the WarmupPlataeuScheduler and trainEpoch() function somewhere else???
 # TODO: Make the torch flash attention warning fuck off because it's annoying
 # TODO: Maybe use a TensorDataset? IDK how much of a speedup you could get but it's a bit slow
@@ -138,7 +139,37 @@ def main():
                 break
 
         return filename
-    
+
+
+
+    def validateModelIO(model:nn.Module, printSummary=True, batchSize=5) -> torchinfo.ModelStatistics:
+        
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        
+        print(f"Using device: {device}")
+
+        model = model.to(device)
+
+        dummy_input = torch.randn(batchSize, 3, 224, 224, device=device, dtype=torch.float)
+        output = model(dummy_input)
+        assert output.size() == (batchSize, 2), f"Expected output size ({batchSize}, 2), got {output.size()}!"
+
+        summaryObject = torchinfo.summary(model=model, input_size=(batchSize, 3, 224, 224), device=device, mode='train', depth=20, verbose=0)
+
+        if printSummary:
+            print(model)
+            print(summaryObject)
+            print(f"Model has {sum(p.numel() for p in model.parameters())} parameters.")
+
+        print("Test passed!")
+        
+        return summaryObject
+
+
+
+
+
+
     #######################################
     # CONFIG        
     #######################################
@@ -146,18 +177,28 @@ def main():
     # Define transformations
     transform = DEFAULT_INITIAL_TRANSFORM
 
+    # MAKE SURE I AM TRUE WHEN WE WANT DATA
+    SAVE_STATISTICS = True
+
+    if not SAVE_STATISTICS:
+        for _ in range(10):
+            print('WARNING: DATA WILL NOT BE SAVED!!!!')
+            time.sleep(0.25)
+
     BATCH_SIZE = 64
     NUM_EPOCHS = 25
     warmupEpochs = 4
     MOMENTUM = 0.9
     LR = 1e-3
 
-    MODEL_NAME = 'SWIN'
+    # CHANGE ME IF YOU USE A DIFFERENT MODEL PLEASE
+    MODEL_NAME = 'DWSConvNet1'
     # Define model
-    model = swinModel
+    model = DWSConvNet1
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     model.to(device)
-
+    validateModelIO(model)
+    
     RUNS_DIR_TRAIN = r'CollectedData\Runs\Train'
     RUNS_DIR_VALIDATION = r'CollectedData\Runs\Validation'
     MODELS_DIR = r'CollectedData\Models'
@@ -169,6 +210,9 @@ def main():
         'pin_memory': True
     }
 
+    splitFraction = 1
+    trainLoader, validationLoader, testLoader = getDataLoaders(splitFraction=splitFraction, dataLoaderKwargs=dataLoaderKwargs)
+
 
     # Initialize summary writers to save loss and accuracy during training and validation
     TRAIN_WRITER_PATH = getSaveFileName(rootPath=RUNS_DIR_TRAIN, epochs=NUM_EPOCHS, batch_size=BATCH_SIZE, lr=LR, momentum=MOMENTUM, modelName=MODEL_NAME)
@@ -179,12 +223,9 @@ def main():
     validationWriter = SummaryWriter(VALIDATION_WRITER_PATH, flush_secs=10)
 
 
-    splitFraction = 1
-    trainLoader, validationLoader, testLoader = getDataLoaders(splitFraction=splitFraction, dataLoaderKwargs=dataLoaderKwargs)
-
     criterion = nn.CrossEntropyLoss()
     # optimizer = optim.Adam(model.parameters(), lr=0.001) # ADAM IS WASHED, SGD SUPREMACY
-    optimizer = torch.optim.SGD(params=model.parameters(), lr=LR, momentum=MOMENTUM, weight_decay=0.01, nesterov=True)
+    optimizer = torch.optim.SGD(params=model.parameters(), lr=LR, momentum=MOMENTUM, weight_decay=0.00, nesterov=True)
 
     # Use LR warmup schedule and reduce learning rate on loss plateu
     warmup = torch.optim.lr_scheduler.LinearLR(optimizer, start_factor=1e-9, end_factor=1, total_iters=warmupEpochs)
@@ -210,27 +251,34 @@ def main():
             batchTrainLoss = trainStats['loss'][batch]
             batchTrainAccuracy = trainStats['accuracy'][batch]
             batchTrainLR = trainStats['lr'][batch]
-            trainWriter.add_scalar('trainLoss', batchTrainLoss, currentTrainBatch)
-            trainWriter.add_scalar('trainAccuracy', batchTrainAccuracy, currentTrainBatch)
-            trainWriter.add_scalar('lr', batchTrainLR, currentTrainBatch)
+            if SAVE_STATISTICS:
+                trainWriter.add_scalar('trainLoss', batchTrainLoss, currentTrainBatch)
+                trainWriter.add_scalar('trainAccuracy', batchTrainAccuracy, currentTrainBatch)
+                trainWriter.add_scalar('lr', batchTrainLR, currentTrainBatch)
             currentTrainBatch += 1
 
         for batch in range(len(validationLoader)):
             batchValidationLoss = validationStats['loss'][batch]
             batchValidationAccuracy = validationStats['accuracy'][batch]
             batchValidationLR = validationStats['lr'][batch]
-            validationWriter.add_scalar('validationLoss', batchValidationLoss, currentValidationBatch)
-            validationWriter.add_scalar('validationAccuracy', batchValidationAccuracy, currentValidationBatch)
-            validationWriter.add_scalar('lr', batchValidationLR, currentValidationBatch)
+            if SAVE_STATISTICS:
+                validationWriter.add_scalar('validationLoss', batchValidationLoss, currentValidationBatch)
+                validationWriter.add_scalar('validationAccuracy', batchValidationAccuracy, currentValidationBatch)
+                validationWriter.add_scalar('lr', batchValidationLR, currentValidationBatch)
             currentValidationBatch += 1
 
 
         print(f"Epoch {epoch+1}, Train Loss: {trainLoss/len(trainLoader)}, Validation Loss: {validationLoss/len(trainLoader)}, Train Accuracy: {trainAccuracy}, Validation Accuracy: {valAccuracy}")
 
+        if batchTrainLR < 1e-8:
+            print('Learning rate collapsed, ending training!')
+            break
+
     print("Finished Training")
     print(f'Train time was {time.time() - startTime}')
 
-    torch.save(model, MODEL_PATH)
+    if SAVE_STATISTICS:
+        torch.save(model, MODEL_PATH)
 
     with torch.no_grad():
         testLoss, testAccuracy, testStats = trainEpoch(model, testLoader, scheduler, freezeModel=True)
