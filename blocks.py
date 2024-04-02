@@ -36,18 +36,32 @@ class BranchBlockNorm(nn.Module):
         
         self.averageChannels = averageChannels
     
-    
-    def forward(self, x:torch.Tensor):
-        
+
+    def forward(self, x: torch.Tensor):
         normInput = self.inputNorm(x)
-                
-        rawOutputs = [branch(normInput) for branch in self.branches]
-        normOutputs = [self.inputNorm(raw) + x for raw in rawOutputs]
+        # Run all branches in parallel and stack results into a (numBranches, batch_size, C, H, W) tensor
+        rawOutputs = nn.parallel.parallel_apply(self.branches, [normInput] * len(self.branches))
+        # We need to use stack() here instead of view since we need all the outputs to be contiguous in memory
+        rawOutputs = torch.stack(rawOutputs)
+        
+        # Reshape rawOutputs to merge the branch dimension with the batch dimension
+        # This allows for it to be passed into normalization so it will be (numBranches*batch_size, C, H, W)
+        rawOutputsMerged = rawOutputs.view(-1, *rawOutputs.shape[2:])
+        normOutputsMerged = self.inputNorm(rawOutputsMerged)
+
+        # Reshape the normalized outputs back to the original shape (numBranches, batch_size, C, H, W)
+        normOutputs = normOutputsMerged.view(*rawOutputs.shape)
+
+        # Add the residual connection, we can't use += here since that breaks things for backpropagation
+        normOutputs = normOutputs + x.unsqueeze(0)
+        
         if self.averageChannels:
-            y = torch.mean(torch.stack(normOutputs), dim=0)
+            # Average over branches
+            y = torch.mean(normOutputs, dim=0)
         else:
-            y = torch.cat(normOutputs, dim=1)
-                
+            # Merge the branches and channels dimensions to get (batch_size, C*numBranches, H, W)
+            y = normOutputs.view(x.size(0), -1, *x.shape[2:])
+        
         return y
     
     
@@ -158,6 +172,9 @@ class DepthwiseSeparableConv2d(nn.Module):
         super().__init__()
         
         self.activation = activation
+        
+        if stride != 1:
+            padding = 0
         
         self.depthwise = nn.Sequential(
             nn.Conv2d(in_channels=in_channels, out_channels=out_channels, 

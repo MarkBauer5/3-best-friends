@@ -1,25 +1,25 @@
 import torch
 import torch.nn as nn
-from torch.utils.data import Subset, DataLoader
-from datasets import RealVsFake140k, DEFAULT_INITIAL_TRANSFORM
-from tqdm import tqdm
-from models import swinModel, vitModel, testCNN1, DWSConvNet1
 import time
-import os
+
+from datasets import RealVsFake140k, DEFAULT_INITIAL_TRANSFORM
 from collections import defaultdict
-import torchinfo
+from models import *
+from torch.utils.data import Subset, DataLoader
+from tqdm import tqdm
+from modelUtils import getDataLoaders, getSaveFileName, validateModelIO, profileModel
+
 
 from tensorboardX import SummaryWriter
 
-
-# TODO: Learning rate collapse should end training, after 
+# TODO: Find a way to ensure the tensorboard logs can appear on the same graph. 
+#   I can't do it easily since there are different numbers of batches in the train and validation sets
+#   We could just do logs by epoch but with how few epochs we do they'd look pretty bad.
 # TODO: Move the WarmupPlataeuScheduler and trainEpoch() function somewhere else???
 # TODO: Make the torch flash attention warning fuck off because it's annoying
-# TODO: Maybe use a TensorDataset? IDK how much of a speedup you could get but it's a bit slow
-
-
 
 def main():
+    
     
     # TODO: Find a way to properly integrate this shit because it SUCKS
     class WarmupPlataeuScheduler():
@@ -94,89 +94,13 @@ def main():
             
             pbar.set_description("loss: {:.6f}, lr: {:.6f}, accuracy: {:.5f}".format(running_loss/(batchNum+1), currentLr, accuracy), refresh=True)
 
-        
         return running_loss, accuracy, statsDict
-
-
-    def getDataLoaders(splitFraction = 1, dataLoaderKwargs={}):
-
-        # Download and prepare datasets
-        trainset = RealVsFake140k(transform=transform, split='train')
-        valset =  RealVsFake140k(transform=transform, split='valid')
-        testset =  RealVsFake140k(transform=transform, split='test')
-
-
-        # Define train/val/test subset size, set SPLIT_FRACTION = 1 to use the whole thing
-        trainset = Subset(trainset, indices=torch.randint(0, RealVsFake140k.TRAIN_SIZE, (int(RealVsFake140k.TRAIN_SIZE*splitFraction),)))
-        valset = Subset(valset, indices=torch.randint(0, RealVsFake140k.VALID_SIZE, (int(RealVsFake140k.VALID_SIZE*splitFraction),)))
-        testset = Subset(testset, indices=torch.randint(0, RealVsFake140k.TEST_SIZE, (int(RealVsFake140k.TEST_SIZE*splitFraction),)))
-
-        # Dataloaders
-        trainLoader = DataLoader(trainset, batch_size=BATCH_SIZE, shuffle=True, **dataLoaderKwargs)
-        validationLoader = DataLoader(valset, batch_size=BATCH_SIZE, shuffle=False, **dataLoaderKwargs)
-        testLoader = DataLoader(testset, batch_size=BATCH_SIZE, shuffle=False, **dataLoaderKwargs)
-
-        return trainLoader, validationLoader, testLoader
-
-
-    def getSaveFileName(rootPath, epochs, batch_size, lr, momentum, modelName):
-
-        duplicateID = 0
-        filename = ''
-        
-        while True:
-            
-            epochs = epochs
-            batch_size = batch_size
-            lr = lr
-            momentum = momentum
-            modelName = modelName
-            
-            filename = os.path.join(rootPath, f'{modelName}-{duplicateID}_Epoch{epochs}_Batch{batch_size}_LR{lr}_Momentum{momentum}')
-            duplicateID += 1
-            
-            if not os.path.exists(filename):
-                break
-
-        return filename
-
-
-
-    def validateModelIO(model:nn.Module, printSummary=True, batchSize=5) -> torchinfo.ModelStatistics:
-        
-        device = "cuda" if torch.cuda.is_available() else "cpu"
-        
-        print(f"Using device: {device}")
-
-        model = model.to(device)
-
-        dummy_input = torch.randn(batchSize, 3, 224, 224, device=device, dtype=torch.float)
-        output = model(dummy_input)
-        assert output.size() == (batchSize, 2), f"Expected output size ({batchSize}, 2), got {output.size()}!"
-
-        summaryObject = torchinfo.summary(model=model, input_size=(batchSize, 3, 224, 224), device=device, mode='train', depth=20, verbose=0)
-
-        if printSummary:
-            print(model)
-            print(summaryObject)
-            print(f"Model has {sum(p.numel() for p in model.parameters())} parameters.")
-
-        print("Test passed!")
-        
-        return summaryObject
-
-
-
-
 
 
     #######################################
     # CONFIG        
     #######################################
     
-    # Define transformations
-    transform = DEFAULT_INITIAL_TRANSFORM
-
     # MAKE SURE I AM TRUE WHEN WE WANT DATA
     SAVE_STATISTICS = True
 
@@ -192,12 +116,13 @@ def main():
     LR = 1e-3
 
     # CHANGE ME IF YOU USE A DIFFERENT MODEL PLEASE
-    MODEL_NAME = 'DWSConvNet1'
+    MODEL_NAME = 'DWSConvNet3_learnedPoolingHwy'
     # Define model
-    model = DWSConvNet1
+    model = DWSConvNet3_learnedPoolingHwy
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     model.to(device)
     validateModelIO(model)
+    profileModel(model, input_size=(BATCH_SIZE, 3, 224, 224))
     
     RUNS_DIR_TRAIN = r'CollectedData\Runs\Train'
     RUNS_DIR_VALIDATION = r'CollectedData\Runs\Validation'
@@ -205,6 +130,7 @@ def main():
 
 
     dataLoaderKwargs = {
+        'batch_size': BATCH_SIZE,
         'num_workers': 4,
         'prefetch_factor': 4,
         'pin_memory': True
@@ -219,8 +145,9 @@ def main():
     VALIDATION_WRITER_PATH = getSaveFileName(rootPath=RUNS_DIR_VALIDATION, epochs=NUM_EPOCHS, batch_size=BATCH_SIZE, lr=LR, momentum=MOMENTUM, modelName=MODEL_NAME)
 
     MODEL_PATH = getSaveFileName(rootPath=MODELS_DIR, epochs=NUM_EPOCHS, batch_size=BATCH_SIZE, lr=LR, momentum=MOMENTUM, modelName=MODEL_NAME)
-    trainWriter = SummaryWriter(TRAIN_WRITER_PATH, flush_secs=10)
-    validationWriter = SummaryWriter(VALIDATION_WRITER_PATH, flush_secs=10)
+    if SAVE_STATISTICS:
+        trainWriter = SummaryWriter(TRAIN_WRITER_PATH, flush_secs=10)
+        validationWriter = SummaryWriter(VALIDATION_WRITER_PATH, flush_secs=10)
 
 
     criterion = nn.CrossEntropyLoss()
@@ -270,7 +197,7 @@ def main():
 
         print(f"Epoch {epoch+1}, Train Loss: {trainLoss/len(trainLoader)}, Validation Loss: {validationLoss/len(trainLoader)}, Train Accuracy: {trainAccuracy}, Validation Accuracy: {valAccuracy}")
 
-        if batchTrainLR < 1e-8:
+        if batchTrainLR < 1e-7 and epoch >= warmupEpochs:
             print('Learning rate collapsed, ending training!')
             break
 
