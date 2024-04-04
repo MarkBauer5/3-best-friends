@@ -87,7 +87,7 @@ class LFWDataset(Dataset):
     A special Dataset class for reading the LFW celebrities dataset
     """
     
-    DATA_PATH = r'datasets\\lfw - Real'
+    DATA_PATH = r'datasets/lfw - Real'
     
     def __init__(self, transform:v2=None, split='train'):
         
@@ -144,8 +144,8 @@ class RealVsFake140k(Dataset):
     A special Dataset class for reading the 140k Real vs Fake dataset
     """
     
-    DATA_PATH = r'datasets\140k Real vs Fake\real_vs_fake\real-vs-fake'
-    LABELS_PATH = r'datasets\140k Real vs Fake'
+    DATA_PATH = r'datasets/140k Real vs Fake/real_vs_fake/real-vs-fake'
+    LABELS_PATH = r'datasets/140k Real vs Fake'
     VALID_SPLITS = ['train', 'valid', 'test']
     
     TRAIN_SIZE = 100000
@@ -203,7 +203,7 @@ class RealVsFake2k(Dataset):
     A special Dataset class for reading the 2k Real vs Fake Small dataset
     """
     
-    DATA_PATH = r'datasets\2k Real vs Fake Small\real_and_fake_face_detection'
+    DATA_PATH = r'datasets/2k Real vs Fake Small/real_and_fake_face_detection'
     VALID_SPLITS = ['train']
     
     def __init__(self, transform=None, split='train') -> None:

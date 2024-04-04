@@ -72,8 +72,8 @@ def validateModelIO(model:nn.Module, printSummary=True, batchSize=5) -> torchinf
     summaryObject = torchinfo.summary(model=model, input_size=(batchSize, 3, 224, 224), device=device, mode='train', depth=20, verbose=0)
 
     if printSummary:
-        print(model)
-        print(summaryObject)
+        # print(model)
+        # print(summaryObject)
         print(f"Model has {sum(p.numel() for p in model.parameters())} parameters.")
 
     print("Test passed!")
