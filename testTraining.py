@@ -19,7 +19,7 @@ from tensorboardX import SummaryWriter
 # TODO: Make the torch flash attention warning fuck off because it's annoying
 
 def main():
-    
+
     
     # TODO: Find a way to properly integrate this shit because it SUCKS
     class WarmupPlataeuScheduler():
@@ -116,17 +116,20 @@ def main():
     LR = 1e-3
 
     # CHANGE ME IF YOU USE A DIFFERENT MODEL PLEASE
-    MODEL_NAME = 'DWSConvNet3_learnedPoolingHwy'
+    MODEL_NAME = 'vit'
     # Define model
-    model = DWSConvNet3_learnedPoolingHwy
-    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    model = vitModel
+    if torch.backends.mps.is_available():
+        device = "mps"
+    elif torch.cuda.is_available():
+        device = "cuda"
     model.to(device)
-    validateModelIO(model)
-    profileModel(model, input_size=(BATCH_SIZE, 3, 224, 224))
+    # validateModelIO(model)
+    # profileModel(model, input_size=(BATCH_SIZE, 3, 224, 224))
     
-    RUNS_DIR_TRAIN = r'CollectedData\Runs\Train'
-    RUNS_DIR_VALIDATION = r'CollectedData\Runs\Validation'
-    MODELS_DIR = r'CollectedData\Models'
+    RUNS_DIR_TRAIN = r'CollectedData/Runs/Train'
+    RUNS_DIR_VALIDATION = r'CollectedData/Runs/Validation'
+    MODELS_DIR = r'CollectedData/Models'
 
 
     dataLoaderKwargs = {
@@ -164,6 +167,7 @@ def main():
 
     currentTrainBatch = 0
     currentValidationBatch = 0
+    epoch = 0
     # Training loop
     for epoch in range(NUM_EPOCHS):
 
