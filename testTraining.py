@@ -120,9 +120,11 @@ def main():
     # Define model
     model = vitModel
     if torch.backends.mps.is_available():
-        device = "mps"
+        device = torch.device("mps")
     elif torch.cuda.is_available():
-        device = "cuda"
+        device = torch.device("cuda")
+    else:
+        device = torch.device("cpu")
     model.to(device)
     # validateModelIO(model)
     # profileModel(model, input_size=(BATCH_SIZE, 3, 224, 224))
