@@ -58,11 +58,12 @@ def getSaveFileName(rootPath, epochs, batch_size, lr, momentum, modelName):
 
 
 def validateModelIO(model:nn.Module, printSummary=True, batchSize=5) -> torchinfo.ModelStatistics:
-
     if torch.backends.mps.is_available():
-        device = "mps"
+        device = torch.device("mps")
     elif torch.cuda.is_available():
-        device = "cuda"
+        device = torch.device("cuda")
+    else:
+        device = torch.device("cpu")
 
     
     print(f"Using device: {device}")
@@ -98,9 +99,11 @@ def profileModel(model:nn.Sequential, input_size:tuple, printOriginalTable=False
     """
     
     if torch.backends.mps.is_available():
-        device = "mps"
+        device = torch.device("mps")
     elif torch.cuda.is_available():
-        device = "cuda"
+        device = torch.device("cuda")
+    else:
+        device = torch.device("cpu")
 
     randomInput = torch.randn(input_size, device=device, dtype=torch.float)
     model = model.to(device)
