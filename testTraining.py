@@ -116,9 +116,9 @@ def main():
     LR = 1e-3
 
     # CHANGE ME IF YOU USE A DIFFERENT MODEL PLEASE
-    MODEL_NAME = 'vit'
+    MODEL_NAME = 'swin'
     # Define model
-    model = vitModel
+    model = swinModel
     if torch.backends.mps.is_available():
         device = torch.device("mps")
     elif torch.cuda.is_available():

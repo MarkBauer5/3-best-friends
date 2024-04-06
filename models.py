@@ -6,18 +6,22 @@ from blocks import *
 
 # 92% accuracy after full training
 # 28M params
-swinModel = nn.Sequential(
-    timm.create_model('swin_tiny_patch4_window7_224', pretrained=False),
-    nn.Linear(in_features=1000, out_features=2)
-)
+# swinModel = nn.Sequential(
+#     timm.create_model('swin_tiny_patch4_window7_224', pretrained=False),
+#     nn.Linear(in_features=1000, out_features=2)
+# )
+
+swinModel = timm.create_model('swin_tiny_patch4_window7_224', pretrained=False, num_classes=2)
 
 
 # 91.X? I think on test set? I forgot
 # 86M parameters
-vitModel = nn.Sequential(
-    timm.create_model('vit_base_patch16_224', pretrained=False),
-    nn.Linear(in_features=1000, out_features=2)
-)
+# vitModel = nn.Sequential(
+#     timm.create_model('vit_base_patch16_224', pretrained=False),
+#     nn.Linear(in_features=1000, out_features=2)
+# )
+
+vitModel = timm.create_model('vit_base_patch16_224', pretrained=False, num_classes=2)
 
 # First CNN I pretty much copy pasted from my CS 444 project
 # NOT TESTED
