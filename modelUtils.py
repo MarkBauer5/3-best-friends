@@ -13,15 +13,30 @@ from tabulate import tabulate
 
 
 
-def getDataLoaders(splitFraction=1, dataLoaderKwargs={}, transform=DEFAULT_INITIAL_TRANSFORM):
+def getDataLoaders(splitFraction=1, dataLoaderKwargs={}, trainTransform=DEFAULT_INITIAL_TRANSFORM, valTestTransform=DEFAULT_INITIAL_TRANSFORM) -> tuple[DataLoader, DataLoader, DataLoader]:
+
+    """
+    Get Train, Validation, and Test dataloaders for the RealVsFake140k dataset
+    
+    Arguments:
+        splitFraction: What percentage of the overall dataset should we use
+        dataLoaderKwargs: What kwargs to use for all the dataloaders like num_workers and such
+        trainTransform: What data augmentation to add to the training data
+        valTestTransform: What data augmentation to add to the validation and test data
+        
+    Returns:
+        trainLoader, validationLoader, testLoader
+    """
+
+    assert splitFraction <= 1 and splitFraction > 0, f"ERROR: Split fraction {splitFraction} is out of bounds"
 
     # Download and prepare datasets
-    trainset = RealVsFake140k(transform=transform, split='train')
-    valset =  RealVsFake140k(transform=transform, split='valid')
-    testset =  RealVsFake140k(transform=transform, split='test')
+    trainset = RealVsFake140k(transform=trainTransform, split='train')
+    valset =  RealVsFake140k(transform=valTestTransform, split='valid')
+    testset =  RealVsFake140k(transform=valTestTransform, split='test')
 
 
-    # Define train/val/test subset size, set SPLIT_FRACTION = 1 to use the whole thing
+    # Define train/val/test subset size, set splitFraction = 1 to use the whole thing
     trainset = Subset(trainset, indices=torch.randint(0, RealVsFake140k.TRAIN_SIZE, (int(RealVsFake140k.TRAIN_SIZE*splitFraction),)))
     valset = Subset(valset, indices=torch.randint(0, RealVsFake140k.VALID_SIZE, (int(RealVsFake140k.VALID_SIZE*splitFraction),)))
     testset = Subset(testset, indices=torch.randint(0, RealVsFake140k.TEST_SIZE, (int(RealVsFake140k.TEST_SIZE*splitFraction),)))
@@ -34,19 +49,29 @@ def getDataLoaders(splitFraction=1, dataLoaderKwargs={}, transform=DEFAULT_INITI
     return trainLoader, validationLoader, testLoader
 
 
-def getSaveFileName(rootPath, epochs, batch_size, lr, momentum, modelName):
+# TODO: Maybe refactor this to allow for kwargs and construct the filename based on that
+def getSaveFileName(rootPath: str, epochs: int, batch_size: int, lr: float, momentum: float, modelName: str):
+
+    """
+    Produces a save file name for the model and tensorboard data. Automatically handles duplicate names.
+    
+    Arguments:
+        rootPath: The folder this should be saved
+        epochs: Number of epochs
+        batch_size: Batch size
+        lr: Initial Learning Rate
+        momentum: Momentum for optimizer
+        modelName: The name of the model
+        
+    Returns: 
+        filename: A string representation of the file the data should be written to
+    """
 
     duplicateID = 0
     filename = ''
     
-    while True:
-        
-        epochs = epochs
-        batch_size = batch_size
-        lr = lr
-        momentum = momentum
-        modelName = modelName
-        
+    # Keep adding 1 to the duplicateID until we find one not in use
+    while True:        
         filename = os.path.join(rootPath, f'{modelName}-{duplicateID}_Epoch{epochs}_Batch{batch_size}_LR{lr}_Momentum{momentum}')
         duplicateID += 1
         
@@ -58,6 +83,20 @@ def getSaveFileName(rootPath, epochs, batch_size, lr, momentum, modelName):
 
 
 def validateModelIO(model:nn.Module, printSummary=True, batchSize=5) -> torchinfo.ModelStatistics:
+    
+    """
+    Validates whether or not an input tensor of a given shape will produce an output of a correct shape.
+    Returns a torchinfo.ModelStatistics object which can be used for more profiling.
+    
+    Arguments:
+        model: The model to be evaluated
+        printSummary: Whether or not to print a summary of the model
+        batchSize: An example batch size to be tested
+        
+    Returns:
+        summaryObject: A torchinfo.ModelStatistics object containing information about the model.
+    """
+    
     if torch.backends.mps.is_available():
         device = torch.device("mps")
     elif torch.cuda.is_available():
@@ -170,3 +209,42 @@ def profileModel(model:nn.Sequential, input_size:tuple, printOriginalTable=False
     if printOriginalTable:
         outputTable = originalEvents.table()
         print(outputTable)
+        
+        
+class WarmupPlateauScheduler():
+    
+    """
+    A simple class that combines both a warmup scheduler and a ReduceLROnPlateau scheduler to simplify 
+    scheduler logic. Simply call scheduler.step(metric) and this will handle chaining the warmup and plateau schedulers
+    """
+
+    def __init__(self, warmup:torch.optim.lr_scheduler.LinearLR, 
+                plateauScheduler:torch.optim.lr_scheduler.ReduceLROnPlateau):
+        
+        """
+        Define a WarmupPlateauScheduler by providing independent warmup and plateau schedulers respectively.
+        
+        Arguments:
+            warmup: The warmup scheduler to be used. Note that this scheduler should have the total_iters kwarg set to determine when to 
+                transition from warmup to plateau scheduling. The default defined in most schedulers is 5.
+            plateauScheduler: A plateau scheduler with whatever parameters you want.    
+        """
+        
+        self.warmup = warmup
+        self.plateauScheduler = plateauScheduler
+        self.warmupEpochs = warmup.total_iters
+        self._currentEpoch = 0
+    
+    def step(self, loss):
+        if self._currentEpoch < self.warmupEpochs:
+            self.warmup.step()
+        else:
+            self.plateauScheduler.step(loss)
+            
+        self._currentEpoch += 1
+    
+    def getLastLR(self):
+        if self._currentEpoch < self.warmupEpochs:
+            return self.warmup.get_last_lr()[0]
+        else:
+            return self.plateauScheduler.optimizer.param_groups[0]['lr']  # Directly get LR from optimizer used in plateuScheduler

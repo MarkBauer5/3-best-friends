@@ -7,7 +7,7 @@ from collections import defaultdict
 from models import *
 from torch.utils.data import Subset, DataLoader
 from tqdm import tqdm
-from modelUtils import getDataLoaders, getSaveFileName, validateModelIO, profileModel
+from modelUtils import getDataLoaders, getSaveFileName, validateModelIO, profileModel, WarmupPlateauScheduler
 
 
 from tensorboardX import SummaryWriter
@@ -15,41 +15,12 @@ from tensorboardX import SummaryWriter
 # TODO: Find a way to ensure the tensorboard logs can appear on the same graph. 
 #   I can't do it easily since there are different numbers of batches in the train and validation sets
 #   We could just do logs by epoch but with how few epochs we do they'd look pretty bad.
-# TODO: Move the WarmupPlataeuScheduler and trainEpoch() function somewhere else???
 # TODO: Make the torch flash attention warning fuck off because it's annoying
 
 def main():
 
-    
-    # TODO: Find a way to properly integrate this shit because it SUCKS
-    class WarmupPlataeuScheduler():
-        
-        """
-        A simple class that combines both a warmup scheduler and a ReduceLROnPlateau scheduler to simplify 
-        scheduler logic.
-        """
 
-        def __init__(self, warmup:torch.optim.lr_scheduler.LinearLR, 
-                    plateauScheduler:torch.optim.lr_scheduler.ReduceLROnPlateau):
-            
-            self.warmup = warmup
-            self.plateauScheduler = plateauScheduler
-            self.warmupEpochs = warmup.total_iters
-        
-        def step(self, loss):
-            if epoch < self.warmupEpochs:
-                self.warmup.step()
-            else:
-                self.plateauScheduler.step(loss)
-        
-        def getLastLR(self):
-            if epoch < self.warmupEpochs:
-                return self.warmup.get_last_lr()[0]
-            else:
-                return self.plateauScheduler.optimizer.param_groups[0]['lr']  # Directly get LR from optimizer used in plateuScheduler
-
-
-    def trainEpoch(model:nn.Module, dataloader:DataLoader, scheduler:WarmupPlataeuScheduler, freezeModel):
+    def trainEpoch(model:nn.Module, dataloader:DataLoader, scheduler:WarmupPlateauScheduler, freezeModel):
         
         model.train()
         running_loss = 0.0                
@@ -73,11 +44,12 @@ def main():
 
             if not freezeModel:
                 loss.backward()
+                
+                # Not sure which clipping works best, we need to clip BEFORE stepping
+                # torch.nn.utils.clip_grad_value_(model.parameters(), clip_value=10.0) # Clip gradients after calculating loss
+                torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1)
+                
                 optimizer.step()
-
-                # Not sure which clipping works best
-                torch.nn.utils.clip_grad_value_(model.parameters(), clip_value=10.0) # Clip gradients after calculating loss
-                # torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1)
 
             running_loss += loss.item()
             
@@ -114,9 +86,18 @@ def main():
     warmupEpochs = 4
     MOMENTUM = 0.9
     LR = 1e-3
+    # How much of the dataset to use, 1 for all, 0 for none    
+    splitFraction = 1
+
+    dataLoaderKwargs = {
+        'batch_size': BATCH_SIZE,
+        'num_workers': 4,
+        'prefetch_factor': 4,
+        'pin_memory': True
+    }
 
     # CHANGE ME IF YOU USE A DIFFERENT MODEL PLEASE
-    MODEL_NAME = 'swin'
+    MODEL_NAME = 'swinModelNewInit'
     # Define model
     model = swinModel
     if torch.backends.mps.is_available():
@@ -126,6 +107,8 @@ def main():
     else:
         device = torch.device("cpu")
     model.to(device)
+    
+    # Validate model will run and profile each layer's computation cost
     # validateModelIO(model)
     # profileModel(model, input_size=(BATCH_SIZE, 3, 224, 224))
     
@@ -134,14 +117,6 @@ def main():
     MODELS_DIR = r'CollectedData/Models'
 
 
-    dataLoaderKwargs = {
-        'batch_size': BATCH_SIZE,
-        'num_workers': 4,
-        'prefetch_factor': 4,
-        'pin_memory': True
-    }
-
-    splitFraction = 1
     trainLoader, validationLoader, testLoader = getDataLoaders(splitFraction=splitFraction, dataLoaderKwargs=dataLoaderKwargs)
 
 
@@ -150,6 +125,9 @@ def main():
     VALIDATION_WRITER_PATH = getSaveFileName(rootPath=RUNS_DIR_VALIDATION, epochs=NUM_EPOCHS, batch_size=BATCH_SIZE, lr=LR, momentum=MOMENTUM, modelName=MODEL_NAME)
 
     MODEL_PATH = getSaveFileName(rootPath=MODELS_DIR, epochs=NUM_EPOCHS, batch_size=BATCH_SIZE, lr=LR, momentum=MOMENTUM, modelName=MODEL_NAME)
+    
+    trainWriter = None
+    validationWriter = None
     if SAVE_STATISTICS:
         trainWriter = SummaryWriter(TRAIN_WRITER_PATH, flush_secs=10)
         validationWriter = SummaryWriter(VALIDATION_WRITER_PATH, flush_secs=10)
@@ -163,23 +141,27 @@ def main():
     warmup = torch.optim.lr_scheduler.LinearLR(optimizer, start_factor=1e-9, end_factor=1, total_iters=warmupEpochs)
     plateuScheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.2, patience=1, threshold=1e-2, cooldown=1)
 
-    scheduler = WarmupPlataeuScheduler(warmup=warmup, plateauScheduler=plateuScheduler)
+    scheduler = WarmupPlateauScheduler(warmup=warmup, plateauScheduler=plateuScheduler)
 
     startTime = time.time()
 
     currentTrainBatch = 0
     currentValidationBatch = 0
     epoch = 0
+    
     # Training loop
     for epoch in range(NUM_EPOCHS):
 
         trainLoss, trainAccuracy, trainStats = trainEpoch(model, trainLoader, scheduler, freezeModel=False)
+        validationLoss = None; valAccuracy = None; validationStats = None
         with torch.no_grad():
             validationLoss, valAccuracy, validationStats = trainEpoch(model, validationLoader, scheduler, freezeModel=True)
 
         # Do plateau scheduler step based on validation loss instead of train loss so we only reduce lr when validation loss stops improving
+        # TODO: Maybe consider stepping on validation accuracy instead? Stepping on loss may mean we can overfit since we improve confidence, but not actual accuracy
         scheduler.step(validationLoss)
 
+        # Write statistics to file if needed
         for batch in range(len(trainLoader)):
             batchTrainLoss = trainStats['loss'][batch]
             batchTrainAccuracy = trainStats['accuracy'][batch]

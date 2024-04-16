@@ -11,6 +11,7 @@ from blocks import *
 #     nn.Linear(in_features=1000, out_features=2)
 # )
 
+# 92.67% Validation, pretty good
 swinModel = timm.create_model('swin_tiny_patch4_window7_224', pretrained=False, num_classes=2)
 
 
@@ -21,6 +22,7 @@ swinModel = timm.create_model('swin_tiny_patch4_window7_224', pretrained=False, 
 #     nn.Linear(in_features=1000, out_features=2)
 # )
 
+# Only 85.36% Val, 85.11% Test
 vitModel = timm.create_model('vit_base_patch16_224', pretrained=False, num_classes=2)
 
 # First CNN I pretty much copy pasted from my CS 444 project
@@ -408,3 +410,5 @@ DWSConvNet3_learnedPoolingHwy = nn.Sequential(
     
     nn.Linear(in_features=256, out_features=2)
 )
+
+# TODO: Try a better CNN lul
