@@ -1,6 +1,7 @@
 import timm
 import torch.nn as nn
 from blocks import *
+from transformers import ViTForImageClassification
 
 # Put predefined model architectures here for training or evaluation
 
@@ -24,6 +25,39 @@ swinModel = timm.create_model('swin_tiny_patch4_window7_224', pretrained=False, 
 
 # Only 85.36% Val, 85.11% Test
 vitModel = timm.create_model('vit_base_patch16_224', pretrained=False, num_classes=2)
+
+# Gets 86.55% on test set
+# TODO: This is pretty sketchy, maybe there's a better way to get this model untrained but I don't know of it.
+class VisualizableVIT(nn.Module):
+    def __init__(self):
+        super().__init__()
+        
+        _visualizableVIT = ViTForImageClassification.from_pretrained('facebook/deit-base-patch16-224', return_dict=False)
+
+        # Clear the weights since I have no idea how to get just the architecture without weights
+        for layer in _visualizableVIT.children():
+            layer.apply(_visualizableVIT._init_weights)
+        
+        self.vit = _visualizableVIT
+        self.classifier = nn.Sequential(
+            nn.LayerNorm(normalized_shape=1000),
+            nn.ReLU(),
+            
+            nn.Linear(1000, 256),
+            nn.LayerNorm(normalized_shape=256),
+            nn.ReLU(),
+            
+            nn.Linear(256, 2),
+        )
+        
+    def forward(self, x):
+        rawOutput = self.vit(x)[0]
+        return self.classifier(rawOutput)
+
+
+
+
+
 
 # First CNN I pretty much copy pasted from my CS 444 project
 # NOT TESTED
@@ -412,3 +446,26 @@ DWSConvNet3_learnedPoolingHwy = nn.Sequential(
 )
 
 # TODO: Try a better CNN lul
+
+
+def main():
+    
+    # Test model loading here
+    
+    customModel = VisualizableVIT()
+    
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    
+    customModel.to(device)
+    
+    dummyInput = torch.randn((4, 3, 224, 224)).to(device)
+    
+    out = customModel(dummyInput)
+    print(out)
+    print(f'{out.shape=}')
+    
+    # print(list(visualizableVIT.children()))
+    pass
+
+if __name__ == '__main__':
+    main()

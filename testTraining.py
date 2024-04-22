@@ -17,6 +17,7 @@ from tensorboardX import SummaryWriter
 #   We could just do logs by epoch but with how few epochs we do they'd look pretty bad.
 # TODO: Make the torch flash attention warning fuck off because it's annoying
 
+
 def main():
 
 
@@ -97,9 +98,9 @@ def main():
     }
 
     # CHANGE ME IF YOU USE A DIFFERENT MODEL PLEASE
-    MODEL_NAME = 'swinModelNewInit'
+    MODEL_NAME = 'visualizableVIT'
     # Define model
-    model = swinModel
+    model = VisualizableVIT()
     if torch.backends.mps.is_available():
         device = torch.device("mps")
     elif torch.cuda.is_available():
@@ -204,4 +205,4 @@ def main():
 # Do this because pytorch gets mad when num_workers > 0 and there isn't a main guard
 if __name__ == '__main__':
     main()
-    
+
