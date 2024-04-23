@@ -2,6 +2,7 @@ import timm
 import torch.nn as nn
 from blocks import *
 from transformers import ViTForImageClassification
+from swin_transformer_v2 import SwinTransformerV2
 
 # Put predefined model architectures here for training or evaluation
 
@@ -53,6 +54,66 @@ class VisualizableVIT(nn.Module):
     def forward(self, x):
         rawOutput = self.vit(x)[0]
         return self.classifier(rawOutput)
+
+
+# 93.73% Test 94.06% Validation
+class VisualizableVIT2(nn.Module):
+    
+    def __init__(self):
+        
+        super(VisualizableVIT2, self).__init__()
+        
+        class Args:
+            def __init__(self) -> None:
+                # data arguments
+                self.num_classes = 2
+                self.img_size = 256
+                self.num_train_data = 10000
+                self.num_test_data = 2000
+                self.dataset_path = "datasets/140k Real vs Fake/real_vs_fake/real-vs-fake/"
+
+                # training arguments
+                self.learning_rate =  1e-4
+                self.epochs = 10
+                self.scheduler = True
+                self.sch_step_size = 2
+                self.sch_gamma = 0.1
+
+                # model arguments
+                self.drop_path_rate = 0.2
+                self.embed_dim = 96
+                self.depths = (2, 2, 6, 2)
+                self.num_heads = (3, 6, 12, 24)
+                self.window_size = 16
+                self.load_model_path = "CollectedData/Models/swinv2_tiny_patch4_window16_256.pth"
+                self.save_model_path = "CollectedData/Models/swinv2_tiny_patch4_window16_256.pth"
+
+                # output arguments
+                self.output_path = "../output/"
+
+        args = Args()
+
+        _visualizableVIT = SwinTransformerV2(img_size=args.img_size,
+                                drop_path_rate=args.drop_path_rate,
+                                embed_dim=args.embed_dim,
+                                depths=args.depths,
+                                num_heads=args.num_heads,
+                                window_size=args.window_size)
+        state_dict = torch.load(args.load_model_path)
+        _visualizableVIT.load_state_dict(state_dict["model"])
+        _visualizableVIT.head = torch.nn.Linear(_visualizableVIT.head.in_features, args.num_classes)
+        
+        # Reset model parameters to train from scratch
+        for layer in _visualizableVIT.children():
+            layer.apply(_visualizableVIT._init_weights)
+            
+        self.model = _visualizableVIT
+        
+    def forward(self, x):
+        return self.model(x)
+
+
+
 
 
 
@@ -451,14 +512,13 @@ DWSConvNet3_learnedPoolingHwy = nn.Sequential(
 def main():
     
     # Test model loading here
-    
-    customModel = VisualizableVIT()
+    customModel = VisualizableVIT2()
     
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     
     customModel.to(device)
     
-    dummyInput = torch.randn((4, 3, 224, 224)).to(device)
+    dummyInput = torch.randn((4, 3, 256, 256)).to(device)
     
     out = customModel(dummyInput)
     print(out)
