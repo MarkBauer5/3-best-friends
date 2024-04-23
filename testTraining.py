@@ -100,7 +100,7 @@ def main():
     # CHANGE ME IF YOU USE A DIFFERENT MODEL PLEASE
     MODEL_NAME = 'visualizableVIT2'
     # Define model
-    model = VisualizableVIT2()
+    model = VisualizableSWIN()
     if torch.backends.mps.is_available():
         device = torch.device("mps")
     elif torch.cuda.is_available():

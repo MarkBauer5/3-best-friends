@@ -57,11 +57,11 @@ class VisualizableVIT(nn.Module):
 
 
 # 93.73% Test 94.06% Validation
-class VisualizableVIT2(nn.Module):
+class VisualizableSWIN(nn.Module):
     
     def __init__(self):
         
-        super(VisualizableVIT2, self).__init__()
+        super(VisualizableSWIN, self).__init__()
         
         class Args:
             def __init__(self) -> None:
@@ -93,21 +93,21 @@ class VisualizableVIT2(nn.Module):
 
         args = Args()
 
-        _visualizableVIT = SwinTransformerV2(img_size=args.img_size,
+        _visualizableSWIN = SwinTransformerV2(img_size=args.img_size,
                                 drop_path_rate=args.drop_path_rate,
                                 embed_dim=args.embed_dim,
                                 depths=args.depths,
                                 num_heads=args.num_heads,
                                 window_size=args.window_size)
         state_dict = torch.load(args.load_model_path)
-        _visualizableVIT.load_state_dict(state_dict["model"])
-        _visualizableVIT.head = torch.nn.Linear(_visualizableVIT.head.in_features, args.num_classes)
+        _visualizableSWIN.load_state_dict(state_dict["model"])
+        _visualizableSWIN.head = torch.nn.Linear(_visualizableSWIN.head.in_features, args.num_classes)
         
         # Reset model parameters to train from scratch
-        for layer in _visualizableVIT.children():
-            layer.apply(_visualizableVIT._init_weights)
+        for layer in _visualizableSWIN.children():
+            layer.apply(_visualizableSWIN._init_weights)
             
-        self.model = _visualizableVIT
+        self.model = _visualizableSWIN
         
     def forward(self, x):
         return self.model(x)
@@ -512,7 +512,7 @@ DWSConvNet3_learnedPoolingHwy = nn.Sequential(
 def main():
     
     # Test model loading here
-    customModel = VisualizableVIT2()
+    customModel = VisualizableSWIN()
     
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     
