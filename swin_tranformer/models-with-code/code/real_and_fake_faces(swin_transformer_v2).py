@@ -424,9 +424,6 @@ if __name__ == "__main__":
     indices = [random.randint(0, len(valid_dataset)) for i in range(16)]
     showprediction(indices)
 
-    indices = [random.randint(0, len(valid_dataset)) for i in range(16)]
-    showprediction(indices)
-
     """## 5.4 Grad-CAM
     
     Use pytorch-grad-cam to visualize cam. Observing areas that have a significant impact on prediction results.
@@ -447,10 +444,13 @@ if __name__ == "__main__":
     cam = GradCAMPlusPlus(model=model, target_layers=target_layer, reshape_transform=rt)
     grayscale_cam = cam(input_tensor=data, aug_smooth=True)[0]
 
+    plt.figure()
+
     cam_img = show_cam_on_image(rgb_img, grayscale_cam, use_rgb=True)
     plt.title(idx_to_class[label])
-    plt.axis("off")
-    plt.imshow(cam_img);
+    plt.imshow(cam_img)
+    # save the image
+    plt.savefig("../output/Grad-CAM.png", dpi=600)
 
     """## 5.5 Captum
     
@@ -458,7 +458,7 @@ if __name__ == "__main__":
     """
 
     model.zero_grad()
-    model.eval();
+    model.eval()
 
     index = 5
     data, label = valid_dataset[index]
