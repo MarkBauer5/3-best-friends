@@ -30,10 +30,11 @@ def getDataLoaders(splitFraction=1, dataLoaderKwargs={}, trainTransform=DEFAULT_
 
     assert splitFraction <= 1 and splitFraction > 0, f"ERROR: Split fraction {splitFraction} is out of bounds"
 
-    # Download and prepare datasets
+    # Download and prepare datasets. Also normalize based on the train transform
     trainset = RealVsFake140k(transform=trainTransform, split='train')
-    valset =  RealVsFake140k(transform=valTestTransform, split='valid')
-    testset =  RealVsFake140k(transform=valTestTransform, split='test')
+    normalizationTransform = trainset.normalizationTransform
+    valset = RealVsFake140k(transform=valTestTransform, split='valid', normalizationTransform=normalizationTransform)
+    testset = RealVsFake140k(transform=valTestTransform, split='test', normalizationTransform=normalizationTransform)
 
 
     # Define train/val/test subset size, set splitFraction = 1 to use the whole thing

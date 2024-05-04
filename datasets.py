@@ -16,9 +16,9 @@ import csv
 
 # TODO: FUCKING NORMALIZE PER DATASET DURING TRAINING
 DEFAULT_INITIAL_TRANSFORM = v2.Compose([
-    v2.Resize((256, 256)),  # Resize images to fit Swin Transformer input dimensions
     v2.ToImage(),
     v2.ToDtype(torch.float32, scale=True),
+    v2.Resize((224, 224)),  # Resize images to fit Swin Transformer input dimensions
     v2.Normalize((0.5,), (0.5,))
     ]
 )
@@ -152,8 +152,10 @@ class RealVsFake140k(Dataset):
     VALID_SIZE = 20000
     TEST_SIZE = 20000
     
-    def __init__(self, transform=None, split='train') -> None:
+    def __init__(self, transform=None, split='train', normalizationTransform:v2.Normalize=None) -> None:
         super().__init__()
+        
+        print(f'Constructing {split} dataset split')
         
         self.transform = transform
         self.dataPath = RealVsFake140k.DATA_PATH
@@ -162,6 +164,9 @@ class RealVsFake140k(Dataset):
         self.split = split
         self.annotations = self._load_annotations()
         
+        self.normalizationTransform = normalizationTransform
+        self._addNormalizationToTransforms()
+
     def _load_annotations(self) -> list[tuple]:
 
         """
@@ -170,7 +175,7 @@ class RealVsFake140k(Dataset):
         Returns:
             annotations: A list of tuples in the form (imagePath, label)
         """
-
+        print('Loading annotations...')
         csvFileName = os.path.join(self.LABELS_PATH, self.split+'.csv')
         
         dataDict = {}
@@ -183,6 +188,7 @@ class RealVsFake140k(Dataset):
 
     def __len__(self):
         return len(self.annotations)
+        # return self.features.shape[0]
     
     def __getitem__(self, index) -> tuple[torch.Tensor, torch.Tensor]:
 
@@ -193,7 +199,29 @@ class RealVsFake140k(Dataset):
             image = self.transform(image)
         return image, label
     
-    
+    def _addNormalizationToTransforms(self):
+        
+        
+        print('Getting normalization for transforms...')
+        
+        if self.split == 'train':
+            maxBatches = 20
+            tempLoader = DataLoader(self, batch_size=64, shuffle=True)
+            
+            featuresList = []
+            for (features, _), _ in zip(tempLoader, [i for i in range(maxBatches)]):
+                featuresList.append(features)
+        
+            # Get means and standard deviations across channels
+            stackedFeatures = torch.concat(featuresList, dim=0)
+            means = torch.mean(stackedFeatures, dim=(0, 2, 3))
+            stds = torch.std(stackedFeatures, dim=(0, 2, 3))
+            print(f'Train normalizations are {means=}, {stds=}!')
+
+            self.normalizationTransform = v2.Normalize(mean=means, std=stds)
+
+        self.transform = v2.Compose(self.transform.transforms + [self.normalizationTransform])
+        print(f'Transform for split {self.split} is {self.transform}')
 
 
 

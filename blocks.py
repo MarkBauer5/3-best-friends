@@ -115,61 +115,91 @@ class HighwayBlock(nn.Module):
         return output + x
     
     
-class ResidualBlock(nn.Module):
+    
+    
+    
+class ResidualBlock4(nn.Module):
         
-    printOutsize = False
-        
-    def __init__(self, channelCount, activation:nn.Module=nn.ReLU(), kernel_size:int=3, stride:int=1, padding:int='same'):
+    def __init__(self, in_channels, out_channels, activation:nn.Module=nn.GELU(), kernel_size:int=3, 
+                stride:int=1, padding:int='same'):
         super().__init__()
+        
         
         self.activation = activation
         
         self.c1 = nn.Sequential(
-            nn.Conv2d(in_channels=channelCount, out_channels=channelCount, kernel_size=kernel_size, 
-                      stride=stride, padding=padding),
-            nn.BatchNorm2d(num_features=channelCount),
+            nn.Conv2d(in_channels=in_channels, out_channels=out_channels, kernel_size=kernel_size, 
+                    stride=stride, padding=padding, bias=False),
+            nn.BatchNorm2d(num_features=out_channels),
             self.activation,
         )
         
         self.c2 = nn.Sequential(
-            nn.Conv2d(in_channels=channelCount, out_channels=channelCount, kernel_size=kernel_size, 
-                      stride=stride, padding=padding),
-            nn.BatchNorm2d(num_features=channelCount),
+            nn.Conv2d(in_channels=out_channels, out_channels=out_channels, kernel_size=kernel_size, 
+                    stride=stride, padding=padding, bias=False),
+            nn.BatchNorm2d(num_features=out_channels),
             self.activation,
         )
+        
+        self.outNorm = nn.BatchNorm2d(num_features=out_channels)
 
+        
+        if in_channels != out_channels:
+            self.residualLayer = nn.Sequential(
+                nn.Conv2d(in_channels=in_channels, out_channels=out_channels, kernel_size=1, bias=False),
+                nn.BatchNorm2d(num_features=out_channels)
+            )
+        else:
+            self.residualLayer = nn.Identity()
+                
     def forward(self, x):
-        
-        if self.printOutsize:
-            print(f'x.size(): {x.size()}')
-            
+
+        residual = self.residualLayer(x)
+
         y1 = self.c1(x)
-        
-        if self.printOutsize:
-            print(f'y1.size(): {y1.size()}')
-            
         y = self.c2(y1)
         
-        if self.printOutsize:
-            print(f'y.size(): {y.size()}\n')
-            
-        y = y + x
-        self.outsize = y.size()
+        return self.outNorm(y + residual)
+    
+    
+class ResidualDownsample(nn.Module):
+    
+    def __init__(self, in_channels):
+        super(ResidualDownsample, self).__init__()
         
-        return self.activation(y)
+        self.downPool = nn.MaxPool2d(kernel_size=2, stride=2)
+        self.downLearned = nn.Sequential(
+            ResidualBlock4(in_channels=in_channels, out_channels=in_channels),
+            self.downPool
+        )
+        
+        self.outNorm = nn.BatchNorm2d(num_features=in_channels)
+        
+    def forward(self, x):
+        
+        xPool = self.downPool(x)
+        downLearned = self.downLearned(x)
+        
+        return self.outNorm(xPool + downLearned)
     
     
+    
+    
+    
+    
+    
+# TODO: This seems completely broken in pytorch? Every sources says this should be faster but it's way slower
+# TODO: TRY THIS WITH AMP, IT MIGHT SUCK LESS!!!
 class DepthwiseSeparableConv2d(nn.Module):
     
     """
     Implements depthwise-pointwise convolution for faster performance. I think this was used in EfficientNet
-    
     https://www.youtube.com/watch?v=vVaRhZXovbw&list=WL&index=44
     """
     
     def __init__(self, in_channels, out_channels, activation:nn.Module=nn.ReLU(), 
-                 kernel_size:int=3, stride:int=1, padding:int='same'):
-        super().__init__()
+                kernel_size:int=3, stride:int=1, padding:int='same'):
+        super(DepthwiseSeparableConv2d, self).__init__()
         
         self.activation = activation
         
@@ -178,13 +208,12 @@ class DepthwiseSeparableConv2d(nn.Module):
         
         self.depthwise = nn.Sequential(
             nn.Conv2d(in_channels=in_channels, out_channels=out_channels, 
-                      kernel_size=kernel_size, stride=stride, padding=padding, groups=in_channels),
+                    kernel_size=kernel_size, stride=stride, padding=padding, groups=in_channels, bias=False),
             nn.BatchNorm2d(num_features=out_channels),
-            self.activation,
         )
         
         self.pointwise = nn.Sequential(
-            nn.Conv2d(in_channels=out_channels, out_channels=out_channels, kernel_size=1, stride=1, padding=0),
+            nn.Conv2d(in_channels=out_channels, out_channels=out_channels, kernel_size=1, stride=1, padding=0, bias=False),
             nn.BatchNorm2d(num_features=out_channels),
             self.activation,
         )
@@ -197,21 +226,118 @@ class DepthwiseSeparableConv2d(nn.Module):
         
 class ResidualDWSeparableConv2d(nn.Module):
     
-    def __init__(self, in_channels, activation:nn.Module=nn.ReLU(), kernel_size:int=3):
-        super().__init__()
+    def __init__(self, in_channels, out_channels, activation:nn.Module=nn.ReLU(), kernel_size:int=3):
+        super(ResidualDWSeparableConv2d, self).__init__()
         
         self.activation = activation
         
-        self.conv1 = DepthwiseSeparableConv2d(in_channels=in_channels, out_channels=in_channels, activation=activation, 
-                                              kernel_size=kernel_size, padding='same')
+        self.conv1 = DepthwiseSeparableConv2d(in_channels=in_channels, out_channels=out_channels, activation=activation, kernel_size=kernel_size, padding='same')
+        self.conv2 = DepthwiseSeparableConv2d(in_channels=out_channels, out_channels=out_channels, activation=activation, kernel_size=kernel_size, padding='same')
         
-        self.conv2 = DepthwiseSeparableConv2d(in_channels=in_channels, out_channels=in_channels, activation=activation, 
-                                              kernel_size=kernel_size, padding='same')
+        self.outNorm = nn.BatchNorm2d(num_features=out_channels)
+
+        # If in channels neq out channels, pass through a 1x1 convolution to change channel count. Sizes must be the same still!
+        if in_channels != out_channels:
+            self.residualLayer = nn.Sequential(
+                nn.Conv2d(in_channels=in_channels, out_channels=out_channels, kernel_size=1, bias=False),
+                nn.BatchNorm2d(num_features=out_channels)
+            )
+        else:
+            self.residualLayer = nn.Identity()
         
     def forward(self, x):
+        
+        residual = self.residualLayer(x)
         
         y1 = self.conv1(x)
         y2 = self.conv2(y1)
         
         # Do the residual connection by adding inputs to outputs
-        return self.activation(y2+x)
+        return self.activation(y2+residual)
+    
+    
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+class DoubleDepthwiseSeparableConv2d(nn.Module):
+    
+    """
+    Implements depthwise-pointwise convolution for faster performance. I think this was used in EfficientNet
+    https://www.youtube.com/watch?v=vVaRhZXovbw&list=WL&index=44
+    
+    This Double separable version separates into both vertical and horizontal convolutions for max efficiency
+    """
+    
+    def __init__(self, in_channels, out_channels, activation:nn.Module=nn.GELU(), 
+                kernel_size:int=3, stride:int=1, padding:int='same'):
+        super(DoubleDepthwiseSeparableConv2d, self).__init__()
+        
+        self.activation = activation
+        
+        if stride != 1:
+            padding = 0
+        
+        # Spatial and channelwise separable convolution should improve speed while hopefully keeping performance the same
+        # No activation because original paper says that's better
+        self.depthwise = nn.Sequential(
+            nn.Conv2d(in_channels=in_channels, out_channels=out_channels, 
+                    kernel_size=(kernel_size, 1), stride=stride, padding=padding, groups=in_channels, bias=False),
+            nn.Conv2d(in_channels=in_channels, out_channels=out_channels, 
+                    kernel_size=(1, kernel_size), stride=stride, padding=padding, groups=in_channels, bias=False),
+            nn.BatchNorm2d(num_features=out_channels),
+        )
+        
+        self.pointwise = nn.Sequential(
+            nn.Conv2d(in_channels=out_channels, out_channels=out_channels, kernel_size=1, stride=1, padding=0, bias=False),
+            nn.BatchNorm2d(num_features=out_channels),
+            self.activation,
+        )
+        
+    def forward(self, x):
+        
+        y1 = self.depthwise(x)
+        return self.pointwise(y1)
+        
+        
+class DoubleResidualDWSeparableConv2d(nn.Module):
+    
+    def __init__(self, in_channels, out_channels, activation:nn.Module=nn.GELU(), kernel_size:int=3):
+        super(ResidualDWSeparableConv2d, self).__init__()
+        
+        self.activation = activation
+        
+        self.conv1 = DepthwiseSeparableConv2d(in_channels=in_channels, out_channels=out_channels, activation=activation, kernel_size=kernel_size, padding='same')
+        self.conv2 = DepthwiseSeparableConv2d(in_channels=out_channels, out_channels=out_channels, activation=activation, kernel_size=kernel_size, padding='same')
+        
+        self.outNorm = nn.BatchNorm2d(num_features=out_channels)
+
+        # If in channels neq out channels, pass through a 1x1 convolution to change channel count. Sizes must be the same still!
+        if in_channels != out_channels:
+            self.residualLayer = nn.Sequential(
+                nn.Conv2d(in_channels=in_channels, out_channels=out_channels, kernel_size=1, bias=False),
+                nn.BatchNorm2d(num_features=out_channels)
+            )
+        else:
+            self.residualLayer = nn.Identity()
+        
+    def forward(self, x):
+        
+        residual = self.residualLayer(x)
+        
+        y1 = self.conv1(x)
+        y2 = self.conv2(y1)
+        
+        # Do the residual connection by adding inputs to outputs
+        return self.activation(y2+residual)
