@@ -24,151 +24,94 @@ torch.backends.cudnn.benchmark = True
 torch.autograd.set_detect_anomaly(False)
 torch.autograd.profiler.emit_nvtx(False)
 torch.autograd.profiler.profile(False)
+USE_AMP = True
 
 
-def main():
-
-
-    def trainEpoch(model:nn.Module, dataloader:DataLoader, scheduler:torch.optim.lr_scheduler.ReduceLROnPlateau, freezeModel:bool):
-        
-        if freezeModel:
-            model.eval()
-        else:
-            model.train()
-
-        running_loss = 0.0
-        correct = 0
-        total = 0
-
-        statsDict = defaultdict(list)
-        
-        pbar = tqdm(range(len(dataloader)))
-        for batchNum, (images, labels) in zip(pbar, dataloader):
-            
-            images:torch.Tensor; labels:torch.Tensor
-            images, labels = images.to(device), labels.to(device)
-
-
-                
-            ########################################################################################################################
-            if not freezeModel:
-                optimizer.zero_grad()
-                
-            with torch.autocast(device_type='cuda', dtype=torch.float16, enabled=USE_AMP):
-                outputs = model(images)                
-                loss = criterion(outputs, labels)
-            
-            if not freezeModel:
-                scaler.scale(loss).backward() # Do backpropagation on scaled loss from AMP
-                scaler.unscale_(optimizer)
-                torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=5)
-                scaler.step(optimizer)
-                scaler.update()
-            ########################################################################################################################
+if torch.backends.mps.is_available():
+    device = torch.device("mps")
+elif torch.cuda.is_available():
+    device = torch.device("cuda")
+else:
+    device = torch.device("cpu")
 
 
 
-            ########################################################################################################################
-            # if not freezeModel:
-            #     optimizer.zero_grad()
-
-            # outputs = model(images)
-            # loss = criterion(outputs, labels)
-            # loss: torch.Tensor
-
-            # if not freezeModel:
-            #     loss.backward()
-            
-            #     # Not sure which clipping works best, we need to clip BEFORE stepping
-            #     # torch.nn.utils.clip_grad_value_(model.parameters(), clip_value=10.0) # Clip gradients after calculating loss
-            #     torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1)
-            #     optimizer.step()
-            ########################################################################################################################
-            
-            
-            running_loss += loss.item()
-            
-            _, predicted = torch.max(outputs.data, 1)
-            total += labels.size(0)
-            correct += (predicted == labels).sum().item()
-            accuracy = correct/total
-            
-            # currentLr = scheduler.getLastLR()
-            currentLr = scheduler.optimizer.param_groups[0]['lr']
-            
-            statsDict['loss'].append(loss.item()) 
-            statsDict['lr'].append(currentLr)
-            statsDict['accuracy'].append(accuracy)
-            
-            pbar.set_description("loss: {:.6f}, lr: {:.6f}, accuracy: {:.5f}".format(running_loss/(batchNum+1), currentLr, accuracy), refresh=True)
-
-        return running_loss, accuracy, statsDict
-
-
-    #######################################
-    # CONFIG        
-    #######################################
+def trainEpoch(model:nn.Module, dataloader:DataLoader, scheduler:torch.optim.lr_scheduler.ReduceLROnPlateau, freezeModel:bool,
+            optimizer, scaler, criterion):
     
-    # MAKE SURE I AM TRUE WHEN WE WANT DATA
-    SAVE_STATISTICS = True
-
-    if not SAVE_STATISTICS:
-        for _ in range(10):
-            print('WARNING: DATA WILL NOT BE SAVED!!!!')
-            time.sleep(0.25)
-
-    BATCH_SIZE = 64
-    NUM_EPOCHS = 15
-    warmupEpochs = 4
-    MOMENTUM = 0.9
-    LR = 1e-3
-    # How much of the dataset to use, 1 for all, 0 for none    
-    splitFraction = 1
-
-    dataLoaderKwargs = {
-        'batch_size': BATCH_SIZE,
-        'num_workers': 4,
-        'prefetch_factor': 1,
-        'pin_memory': True
-    }
-
-    USE_AMP = True
-
-    # CHANGE ME IF YOU USE A DIFFERENT MODEL PLEASE
-    MODEL_NAME = 'ResnetRun2'
-    # Define model
-    model = customResnet #VisualizableSWIN()
-    if torch.backends.mps.is_available():
-        device = torch.device("mps")
-    elif torch.cuda.is_available():
-        device = torch.device("cuda")
+    if freezeModel:
+        model.eval()
     else:
-        device = torch.device("cpu")
-    model.to(device)
-    
-    # Validate model will run and profile each layer's computation cost
-    # validateModelIO(model)
-    # profileModel(model, input_size=(BATCH_SIZE, 3, 224, 224))
-    
-    RUNS_DIR_TRAIN = r'CollectedData/Runs/Train'
-    RUNS_DIR_VALIDATION = r'CollectedData/Runs/Validation'
-    MODELS_DIR = r'CollectedData/Models'
+        model.train()
 
-    TRAIN_TRANSFORM = v2.Compose([
-            v2.ToImage(),
-            v2.ToDtype(torch.float32, scale=True),
-            v2.Resize((224, 224)),  # Resize images to fit Swin Transformer input dimensions
-        ])
-    
-    VALTEST_TRANSFORM = v2.Compose([
-            v2.ToImage(),
-            v2.ToDtype(torch.float32, scale=True),
-            v2.Resize((224, 224)),  # Resize images to fit Swin Transformer input dimensions
-        ])
-    
+    running_loss = 0.0
+    correct = 0
+    total = 0
 
+    statsDict = defaultdict(list)
+    
+    pbar = tqdm(range(len(dataloader)))
+    for batchNum, (images, labels) in zip(pbar, dataloader):
+        
+        images:torch.Tensor; labels:torch.Tensor
+        images, labels = images.to(device), labels.to(device)
+
+        if not freezeModel:
+            optimizer.zero_grad()
+        
+        # Use AMP for better train speed
+        with torch.autocast(device_type='cuda', dtype=torch.float16, enabled=USE_AMP):
+            outputs = model(images)                
+            loss = criterion(outputs, labels)
+        
+        if not freezeModel:
+            scaler.scale(loss).backward() # Do backpropagation on scaled loss from AMP
+            scaler.unscale_(optimizer)
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=5)
+            scaler.step(optimizer)
+            scaler.update()
+        
+        running_loss += loss.item()
+        
+        _, predicted = torch.max(outputs.data, 1)
+        total += labels.size(0)
+        correct += (predicted == labels).sum().item()
+        accuracy = correct/total
+        
+        # currentLr = scheduler.getLastLR()
+        currentLr = scheduler.optimizer.param_groups[0]['lr']
+        
+        statsDict['loss'].append(loss.item()) 
+        statsDict['lr'].append(currentLr)
+        statsDict['accuracy'].append(accuracy)
+        
+        pbar.set_description("loss: {:.6f}, lr: {:.6f}, accuracy: {:.5f}".format(running_loss/(batchNum+1), currentLr, accuracy), refresh=True)
+
+    return running_loss, accuracy, statsDict
+
+
+
+
+
+def trainModel(trainingKwargs:dict):
+    
+    model = trainingKwargs['model']
+    MODEL_NAME = trainingKwargs['MODEL_NAME']
+    NUM_EPOCHS = trainingKwargs['NUM_EPOCHS']
+    BATCH_SIZE = trainingKwargs['BATCH_SIZE']
+    LR = trainingKwargs['LR']
+    MOMENTUM = trainingKwargs['MOMENTUM']
+    TRAIN_TRANSFORM = ['TRAIN_TRANSFORM']
+    VALTEST_TRANSFORM = trainingKwargs['VALTEST_TRANSFORM']
+    dataLoaderKwargs = trainingKwargs['dataLoaderKwargs']
+    splitFraction = trainingKwargs['splitFraction']
+    RUNS_DIR_TRAIN = trainingKwargs['RUNS_DIR_TRAIN']
+    RUNS_DIR_VALIDATION = trainingKwargs['RUNS_DIR_VALIDATION']
+    MODELS_DIR = trainingKwargs['MODELS_DIR']
+    SAVE_STATISTICS = trainingKwargs['SAVE_STATISTICS']
+    
+    
     trainLoader, validationLoader, testLoader = getDataLoaders(splitFraction=splitFraction, dataLoaderKwargs=dataLoaderKwargs, trainTransform=TRAIN_TRANSFORM, valTestTransform=VALTEST_TRANSFORM)
-
 
     # Initialize summary writers to save loss and accuracy during training and validation
     TRAIN_WRITER_PATH = getSaveFileName(rootPath=RUNS_DIR_TRAIN, epochs=NUM_EPOCHS, batch_size=BATCH_SIZE, lr=LR, momentum=MOMENTUM, modelName=MODEL_NAME)
@@ -189,7 +132,7 @@ def main():
 
     # Use LR warmup schedule and reduce learning rate on loss plateu
     # warmup = torch.optim.lr_scheduler.LinearLR(optimizer, start_factor=1e-9, end_factor=1, total_iters=warmupEpochs)
-    plateuScheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.2, patience=1, threshold=1e-2, cooldown=1)
+    plateuScheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.1, patience=1, threshold=1e-2, cooldown=1)
     scheduler = plateuScheduler
     # scheduler = WarmupPlateauScheduler(warmup=warmup, plateauScheduler=plateuScheduler)
 
@@ -204,10 +147,10 @@ def main():
     # Training loop
     for epoch in range(NUM_EPOCHS):
 
-        trainLoss, trainAccuracy, trainStats = trainEpoch(model, trainLoader, scheduler, freezeModel=False)
+        trainLoss, trainAccuracy, trainStats = trainEpoch(model, trainLoader, scheduler, freezeModel=False, optimizer=optimizer, scaler=scaler, criterion=criterion)
         validationLoss = None; valAccuracy = None; validationStats = None
         with torch.no_grad():
-            validationLoss, valAccuracy, validationStats = trainEpoch(model, validationLoader, scheduler, freezeModel=True)
+            validationLoss, valAccuracy, validationStats = trainEpoch(model, validationLoader, scheduler, freezeModel=True, optimizer=optimizer, scaler=scaler, criterion=criterion)
 
         # Do plateau scheduler step based on validation loss instead of train loss so we only reduce lr when validation loss stops improving. Stepping on train loss means we only reduce
         #   lr after we've overfit to the data instead of when we actually need to drop lr to learn better
@@ -238,7 +181,7 @@ def main():
 
         print(f"Epoch {epoch+1}, Train Loss: {trainLoss/len(trainLoader)}, Validation Loss: {validationLoss/len(trainLoader)}, Train Accuracy: {trainAccuracy}, Validation Accuracy: {valAccuracy}")
 
-        if batchTrainLR < 1e-7 and epoch >= warmupEpochs:
+        if batchTrainLR < 1e-7:
             print('Learning rate collapsed, ending training!')
             break
 
@@ -249,10 +192,88 @@ def main():
         torch.save(model, MODEL_PATH)
 
     with torch.no_grad():
-        testLoss, testAccuracy, testStats = trainEpoch(model, testLoader, scheduler, freezeModel=True)
+        testLoss, testAccuracy, testStats = trainEpoch(model, testLoader, scheduler, freezeModel=True, optimizer=optimizer, scaler=scaler, criterion=criterion)
 
     print(f'Accuracy of the network on the {int(RealVsFake140k.TEST_SIZE*splitFraction)} test images: {100 * testAccuracy}%, loss was {testLoss}')
+
+
+
+
+
+def main():
+
+    #######################################
+    # CONFIG        
+    #######################################
     
+    # MAKE SURE I AM TRUE WHEN WE WANT DATA
+    SAVE_STATISTICS = True
+
+    if not SAVE_STATISTICS:
+        for _ in range(10):
+            print('WARNING: DATA WILL NOT BE SAVED!!!!')
+            time.sleep(0.25)
+
+    BATCH_SIZE = 128
+    NUM_EPOCHS = 15
+    MOMENTUM = 0.9
+    LR = 1e-3
+    # How much of the dataset to use, 1 for all, 0 for none    
+    splitFraction = 1
+
+    dataLoaderKwargs = {
+        'batch_size': BATCH_SIZE,
+        'num_workers': 4,
+        'prefetch_factor': 1,
+        'pin_memory': True
+    }
+
+
+    # CHANGE ME IF YOU USE A DIFFERENT MODEL PLEASE
+    MODEL_NAME = 'SuperSepNet-Small-Contd'
+    # model = superSepNetSmall #VisualizableSWIN()
+    model = torch.load('CollectedData\Models\SuperSepNet-Small-0_Epoch15_Batch128_LR0.001_Momentum0.9')
+    model.to(device)
+    
+    # Validate model will run and profile each layer's computation cost
+    # validateModelIO(model)
+    # profileModel(model, input_size=(BATCH_SIZE, 3, 224, 224))
+    
+    RUNS_DIR_TRAIN = r'CollectedData/Runs/Train'
+    RUNS_DIR_VALIDATION = r'CollectedData/Runs/Validation'
+    MODELS_DIR = r'CollectedData/Models'
+
+    TRAIN_TRANSFORM = v2.Compose([
+            v2.ToImage(),
+            v2.ToDtype(torch.float32, scale=True),
+            v2.Resize((224, 224)),  # Resize images to fit Swin Transformer input dimensions
+        ])
+    
+    VALTEST_TRANSFORM = v2.Compose([
+            v2.ToImage(),
+            v2.ToDtype(torch.float32, scale=True),
+            v2.Resize((224, 224)),  # Resize images to fit Swin Transformer input dimensions
+        ])
+    
+
+    trainingKwargs = {
+        'model': model,
+        'MODEL_NAME': MODEL_NAME,
+        'NUM_EPOCHS': NUM_EPOCHS,
+        'BATCH_SIZE': BATCH_SIZE,
+        'LR': LR,
+        'MOMENTUM': MOMENTUM,
+        'TRAIN_TRANSFORM': TRAIN_TRANSFORM,
+        'VALTEST_TRANSFORM': VALTEST_TRANSFORM,
+        'dataLoaderKwargs': dataLoaderKwargs,
+        'splitFraction': splitFraction,
+        'RUNS_DIR_TRAIN': RUNS_DIR_TRAIN,
+        'RUNS_DIR_VALIDATION': RUNS_DIR_VALIDATION,
+        'MODELS_DIR': MODELS_DIR,
+        'SAVE_STATISTICS': SAVE_STATISTICS
+    }
+
+    trainModel(trainingKwargs=trainingKwargs)
 
 # Do this because pytorch gets mad when num_workers > 0 and there isn't a main guard
 if __name__ == '__main__':

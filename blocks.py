@@ -197,7 +197,7 @@ class DepthwiseSeparableConv2d(nn.Module):
     https://www.youtube.com/watch?v=vVaRhZXovbw&list=WL&index=44
     """
     
-    def __init__(self, in_channels, out_channels, activation:nn.Module=nn.ReLU(), 
+    def __init__(self, in_channels, out_channels, activation:nn.Module=nn.GELU(), 
                 kernel_size:int=3, stride:int=1, padding:int='same'):
         super(DepthwiseSeparableConv2d, self).__init__()
         
@@ -292,7 +292,7 @@ class DoubleDepthwiseSeparableConv2d(nn.Module):
         # Spatial and channelwise separable convolution should improve speed while hopefully keeping performance the same
         # No activation because original paper says that's better
         self.depthwise = nn.Sequential(
-            nn.Conv2d(in_channels=in_channels, out_channels=out_channels, 
+            nn.Conv2d(in_channels=in_channels, out_channels=in_channels, 
                     kernel_size=(kernel_size, 1), stride=stride, padding=padding, groups=in_channels, bias=False),
             nn.Conv2d(in_channels=in_channels, out_channels=out_channels, 
                     kernel_size=(1, kernel_size), stride=stride, padding=padding, groups=in_channels, bias=False),
@@ -314,12 +314,12 @@ class DoubleDepthwiseSeparableConv2d(nn.Module):
 class DoubleResidualDWSeparableConv2d(nn.Module):
     
     def __init__(self, in_channels, out_channels, activation:nn.Module=nn.GELU(), kernel_size:int=3):
-        super(ResidualDWSeparableConv2d, self).__init__()
+        super(DoubleResidualDWSeparableConv2d, self).__init__()
         
         self.activation = activation
         
-        self.conv1 = DepthwiseSeparableConv2d(in_channels=in_channels, out_channels=out_channels, activation=activation, kernel_size=kernel_size, padding='same')
-        self.conv2 = DepthwiseSeparableConv2d(in_channels=out_channels, out_channels=out_channels, activation=activation, kernel_size=kernel_size, padding='same')
+        self.conv1 = DoubleDepthwiseSeparableConv2d(in_channels=in_channels, out_channels=out_channels, activation=activation, kernel_size=kernel_size, padding='same')
+        self.conv2 = DoubleDepthwiseSeparableConv2d(in_channels=out_channels, out_channels=out_channels, activation=activation, kernel_size=kernel_size, padding='same')
         
         self.outNorm = nn.BatchNorm2d(num_features=out_channels)
 
@@ -341,3 +341,24 @@ class DoubleResidualDWSeparableConv2d(nn.Module):
         
         # Do the residual connection by adding inputs to outputs
         return self.activation(y2+residual)
+    
+    
+class ResidualDownsampleSep(nn.Module):
+    
+    def __init__(self, in_channels):
+        super(ResidualDownsampleSep, self).__init__()
+        
+        self.downPool = nn.MaxPool2d(kernel_size=2, stride=2)
+        self.downLearned = nn.Sequential(
+            DoubleResidualDWSeparableConv2d(in_channels=in_channels, out_channels=in_channels),
+            self.downPool
+        )
+        
+        self.outNorm = nn.BatchNorm2d(num_features=in_channels)
+        
+    def forward(self, x):
+        
+        xPool = self.downPool(x)
+        downLearned = self.downLearned(x)
+        
+        return self.outNorm(xPool + downLearned)

@@ -4,3 +4,4 @@ datasets/**/*.jpg
 **/*.pyc
 **/*DS_Store
 CollectedData/Models/**
+CollectedData/Archived Results/**

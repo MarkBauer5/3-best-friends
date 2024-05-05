@@ -508,52 +508,107 @@ from modelUtils import profileModel
 
 # TODO: Try a better CNN lul
 
-customResnet = nn.Sequential(
-    ResidualBlock4(in_channels=3, out_channels=8),
-    ResidualDownsample(in_channels=8), # 112
+# 0.9999 Train, 0.9151 Val, 0.91585 Test
+# customResnet = nn.Sequential(
+#     ResidualBlock4(in_channels=3, out_channels=4),
+#     ResidualDownsample(in_channels=4), # 112
     
-    ResidualBlock4(in_channels=8, out_channels=16),
-    ResidualDownsample(in_channels=16), # 56
+#     ResidualBlock4(in_channels=4, out_channels=8),
+#     ResidualDownsample(in_channels=8), # 56
     
-    ResidualBlock4(in_channels=16, out_channels=32),
-    ResidualDownsample(in_channels=32), # 28
+#     ResidualBlock4(in_channels=8, out_channels=16),
+#     ResidualBlock4(in_channels=16, out_channels=32),
+#     ResidualDownsample(in_channels=32), # 28
     
-    ResidualBlock4(in_channels=32, out_channels=64),
-    ResidualBlock4(in_channels=64, out_channels=128),
-    ResidualBlock4(in_channels=128, out_channels=128),
-    ResidualDownsample(in_channels=128), # 14
+#     ResidualBlock4(in_channels=32, out_channels=64),
+#     ResidualBlock4(in_channels=64, out_channels=128),
+#     ResidualBlock4(in_channels=128, out_channels=128),
+#     ResidualDownsample(in_channels=128), # 14
 
-    ResidualBlock4(in_channels=128, out_channels=256),
-    *[ResidualBlock4(in_channels=256, out_channels=256) for _ in range(2)],
-    ResidualDownsample(in_channels=256), # 7
+#     ResidualBlock4(in_channels=128, out_channels=256),
+#     *[ResidualBlock4(in_channels=256, out_channels=256) for _ in range(2)],
+#     ResidualDownsample(in_channels=256), # 7
     
-    ResidualBlock4(in_channels=256, out_channels=512),
-    *[ResidualBlock4(in_channels=512, out_channels=512) for _ in range(2)],
-    ResidualDownsample(in_channels=512), # 3
+#     ResidualBlock4(in_channels=256, out_channels=512),
+#     *[ResidualBlock4(in_channels=512, out_channels=512) for _ in range(2)],
+#     ResidualDownsample(in_channels=512), # 3
 
-    ResidualBlock4(in_channels=512, out_channels=1024),
-    *[ResidualBlock4(in_channels=1024, out_channels=1024) for _ in range(2)],
+#     ResidualBlock4(in_channels=512, out_channels=1024),
+#     *[ResidualBlock4(in_channels=1024, out_channels=1024) for _ in range(2)],
 
-    *[ResidualBlock4(in_channels=1024, out_channels=1024) for _ in range(4)],
+#     *[ResidualBlock4(in_channels=1024, out_channels=1024) for _ in range(3)],
 
-    ResidualBlock4(in_channels=1024, out_channels=2048),
-    *[ResidualBlock4(in_channels=2048, out_channels=2048) for _ in range(4)],
+#     ResidualBlock4(in_channels=1024, out_channels=2048),
+#     *[ResidualBlock4(in_channels=2048, out_channels=2048) for _ in range(3)],
 
-    ResidualBlock4(in_channels=2048, out_channels=4096),
-    *[ResidualBlock4(in_channels=4096, out_channels=4096) for _ in range(2)],
+#     ResidualBlock4(in_channels=2048, out_channels=4096),
+#     *[ResidualBlock4(in_channels=4096, out_channels=4096) for _ in range(2)],
+
+#     nn.AdaptiveAvgPool2d(1),
+#     nn.Flatten(),
+    
+#     nn.Linear(in_features=4096, out_features=2048),
+#     nn.ReLU(),
+#     nn.LayerNorm(normalized_shape=2048),
+    
+#     nn.Linear(in_features=2048, out_features=1024),
+#     nn.ReLU(),
+#     nn.LayerNorm(normalized_shape=1024),
+
+#     nn.Linear(in_features=1024, out_features=512),
+#     nn.ReLU(),
+#     nn.LayerNorm(normalized_shape=512),
+    
+#     nn.Linear(in_features=512, out_features=2),
+# )
+
+# Runs like twice as fast as previous ResNet, but looks like it will have worse performance# Also only uses 9.2 GB when compared to the 22 GB from ResNet 
+# TODO: Continue training this later, seems to not have fully fit yet.
+# After 15 epochs: Train: 92.414%, Val: 81.015%, Test: 81.035%
+superSepNetSmall = nn.Sequential(
+    DoubleResidualDWSeparableConv2d(in_channels=3, out_channels=9),
+    ResidualDownsampleSep(in_channels=9), # 112
+    
+    DoubleResidualDWSeparableConv2d(in_channels=9, out_channels=18),
+    ResidualDownsampleSep(in_channels=18), # 56
+    
+    DoubleResidualDWSeparableConv2d(in_channels=18, out_channels=36),
+    ResidualDownsampleSep(in_channels=36), # 28
+    
+    DoubleResidualDWSeparableConv2d(in_channels=36, out_channels=72),
+    DoubleResidualDWSeparableConv2d(in_channels=72, out_channels=144),
+    DoubleResidualDWSeparableConv2d(in_channels=144, out_channels=144),
+    ResidualDownsampleSep(in_channels=144), # 14
+
+    DoubleResidualDWSeparableConv2d(in_channels=144, out_channels=288),
+    *[DoubleResidualDWSeparableConv2d(in_channels=288, out_channels=288) for _ in range(2)],
+    ResidualDownsampleSep(in_channels=288), # 7
+    
+    DoubleResidualDWSeparableConv2d(in_channels=288, out_channels=576),
+    *[DoubleResidualDWSeparableConv2d(in_channels=576, out_channels=576) for _ in range(2)],
+    ResidualDownsampleSep(in_channels=576), # 3
+
+    DoubleResidualDWSeparableConv2d(in_channels=576, out_channels=1152),
+    *[DoubleResidualDWSeparableConv2d(in_channels=1152, out_channels=1152) for _ in range(5)],
+
+    DoubleResidualDWSeparableConv2d(in_channels=1152, out_channels=2304),
+    *[DoubleResidualDWSeparableConv2d(in_channels=2304, out_channels=2304) for _ in range(3)],
+
+    DoubleResidualDWSeparableConv2d(in_channels=2304, out_channels=4608),
+    *[DoubleResidualDWSeparableConv2d(in_channels=4608, out_channels=4608) for _ in range(2)],
 
     nn.AdaptiveAvgPool2d(1),
     nn.Flatten(),
     
-    nn.Linear(in_features=4096, out_features=2048),
+    nn.Linear(in_features=4608, out_features=2304),
     nn.ReLU(),
-    nn.LayerNorm(normalized_shape=2048),
+    nn.LayerNorm(normalized_shape=2304),
     
-    nn.Linear(in_features=2048, out_features=1024),
+    nn.Linear(in_features=2304, out_features=1152),
     nn.ReLU(),
-    nn.LayerNorm(normalized_shape=1024),
+    nn.LayerNorm(normalized_shape=1152),
 
-    nn.Linear(in_features=1024, out_features=512),
+    nn.Linear(in_features=1152, out_features=512),
     nn.ReLU(),
     nn.LayerNorm(normalized_shape=512),
     
@@ -561,29 +616,65 @@ customResnet = nn.Sequential(
 )
 
 
-superSepNet = nn.Sequential(
-    DoubleResidualDWSeparableConv2d(in_channels=3, out_channels=8),
-    ResidualDownsample(in_channels=8), # 112
+# superSepNetLarge = nn.Sequential(
+#     DoubleResidualDWSeparableConv2d(in_channels=3, out_channels=9),
+#     ResidualDownsampleSep(in_channels=9), # 112
     
-    DoubleResidualDWSeparableConv2d(in_channels=8, out_channels=16),
-    ResidualDownsample(in_channels=16), # 56
+#     DoubleResidualDWSeparableConv2d(in_channels=9, out_channels=18),
+#     *[DoubleResidualDWSeparableConv2d(in_channels=18, out_channels=18) for _ in range(4)],
+#     ResidualDownsampleSep(in_channels=18), # 56
     
-    DoubleResidualDWSeparableConv2d(in_channels=16, out_channels=32),
-    ResidualDownsample(in_channels=32), # 28
+#     DoubleResidualDWSeparableConv2d(in_channels=18, out_channels=36),
+#     *[DoubleResidualDWSeparableConv2d(in_channels=36, out_channels=36) for _ in range(4)],
+#     ResidualDownsampleSep(in_channels=36), # 28
     
-    DoubleResidualDWSeparableConv2d(in_channels=32, out_channels=64),
-    DoubleResidualDWSeparableConv2d(in_channels=64, out_channels=128),
-    DoubleResidualDWSeparableConv2d(in_channels=128, out_channels=128),
-    ResidualDownsample(in_channels=128), # 14
+#     DoubleResidualDWSeparableConv2d(in_channels=36, out_channels=72),
+#     DoubleResidualDWSeparableConv2d(in_channels=72, out_channels=144),
+#     DoubleResidualDWSeparableConv2d(in_channels=144, out_channels=144),
+#     *[DoubleResidualDWSeparableConv2d(in_channels=144, out_channels=144) for _ in range(4)],
+#     ResidualDownsampleSep(in_channels=144), # 14
 
-)
+#     DoubleResidualDWSeparableConv2d(in_channels=144, out_channels=288),
+#     *[DoubleResidualDWSeparableConv2d(in_channels=288, out_channels=288) for _ in range(4)],
+#     ResidualDownsampleSep(in_channels=288), # 7
+    
+#     DoubleResidualDWSeparableConv2d(in_channels=288, out_channels=576),
+#     *[DoubleResidualDWSeparableConv2d(in_channels=576, out_channels=576) for _ in range(4)],
+#     ResidualDownsampleSep(in_channels=576), # 3
+
+#     DoubleResidualDWSeparableConv2d(in_channels=576, out_channels=1152),
+#     *[DoubleResidualDWSeparableConv2d(in_channels=1152, out_channels=1152) for _ in range(10)],
+
+#     DoubleResidualDWSeparableConv2d(in_channels=1152, out_channels=2304),
+#     *[DoubleResidualDWSeparableConv2d(in_channels=2304, out_channels=2304) for _ in range(6)],
+
+#     DoubleResidualDWSeparableConv2d(in_channels=2304, out_channels=4608),
+#     *[DoubleResidualDWSeparableConv2d(in_channels=4608, out_channels=4608) for _ in range(4)],
+
+#     nn.AdaptiveAvgPool2d(1),
+#     nn.Flatten(),
+    
+#     nn.Linear(in_features=4608, out_features=2304),
+#     nn.ReLU(),
+#     nn.LayerNorm(normalized_shape=2304),
+    
+#     nn.Linear(in_features=2304, out_features=1152),
+#     nn.ReLU(),
+#     nn.LayerNorm(normalized_shape=1152),
+
+#     nn.Linear(in_features=1152, out_features=512),
+#     nn.ReLU(),
+#     nn.LayerNorm(normalized_shape=512),
+    
+#     nn.Linear(in_features=512, out_features=2),
+# )
 
 
 def main():
     
     # Test model loading here
     # customModel = VisualizableSWIN()
-    customModel = customResnet
+    customModel = superSepNetSmall
     
     profileModel(customModel, input_size=(4, 3, 224, 224))
     
