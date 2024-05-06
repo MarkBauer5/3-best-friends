@@ -294,9 +294,11 @@ class DoubleDepthwiseSeparableConv2d(nn.Module):
         self.depthwise = nn.Sequential(
             nn.Conv2d(in_channels=in_channels, out_channels=in_channels, 
                     kernel_size=(kernel_size, 1), stride=stride, padding=padding, groups=in_channels, bias=False),
+            # self.activation,
             nn.Conv2d(in_channels=in_channels, out_channels=out_channels, 
                     kernel_size=(1, kernel_size), stride=stride, padding=padding, groups=in_channels, bias=False),
             nn.BatchNorm2d(num_features=out_channels),
+            # self.activation,
         )
         
         self.pointwise = nn.Sequential(
@@ -340,7 +342,7 @@ class DoubleResidualDWSeparableConv2d(nn.Module):
         y2 = self.conv2(y1)
         
         # Do the residual connection by adding inputs to outputs
-        return self.activation(y2+residual)
+        return self.outNorm(y2+residual)
     
     
 class ResidualDownsampleSep(nn.Module):

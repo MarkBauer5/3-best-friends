@@ -67,7 +67,7 @@ def trainEpoch(model:nn.Module, dataloader:DataLoader, scheduler:torch.optim.lr_
         if not freezeModel:
             scaler.scale(loss).backward() # Do backpropagation on scaled loss from AMP
             scaler.unscale_(optimizer)
-            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=5)
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1)
             scaler.step(optimizer)
             scaler.update()
         
@@ -101,7 +101,7 @@ def trainModel(trainingKwargs:dict):
     BATCH_SIZE = trainingKwargs['BATCH_SIZE']
     LR = trainingKwargs['LR']
     MOMENTUM = trainingKwargs['MOMENTUM']
-    TRAIN_TRANSFORM = ['TRAIN_TRANSFORM']
+    TRAIN_TRANSFORM = trainingKwargs['TRAIN_TRANSFORM']
     VALTEST_TRANSFORM = trainingKwargs['VALTEST_TRANSFORM']
     dataLoaderKwargs = trainingKwargs['dataLoaderKwargs']
     splitFraction = trainingKwargs['splitFraction']
@@ -110,7 +110,12 @@ def trainModel(trainingKwargs:dict):
     MODELS_DIR = trainingKwargs['MODELS_DIR']
     SAVE_STATISTICS = trainingKwargs['SAVE_STATISTICS']
     
+    if not SAVE_STATISTICS:
+        for _ in range(10):
+            print('WARNING: DATA WILL NOT BE SAVED!!!!')
+            time.sleep(0.25)
     
+    model.to(device)
     trainLoader, validationLoader, testLoader = getDataLoaders(splitFraction=splitFraction, dataLoaderKwargs=dataLoaderKwargs, trainTransform=TRAIN_TRANSFORM, valTestTransform=VALTEST_TRANSFORM)
 
     # Initialize summary writers to save loss and accuracy during training and validation
@@ -127,8 +132,8 @@ def trainModel(trainingKwargs:dict):
 
 
     criterion = nn.CrossEntropyLoss()
-    # optimizer = optim.Adam(model.parameters(), lr=0.001) # ADAM IS WASHED, SGD SUPREMACY
-    optimizer = torch.optim.SGD(params=model.parameters(), lr=LR, momentum=MOMENTUM, weight_decay=1e-4, nesterov=True)
+    optimizer = torch.optim.NAdam(model.parameters(), lr=LR) # ADAM IS WASHED, SGD SUPREMACY
+    # optimizer = torch.optim.SGD(params=model.parameters(), lr=LR, momentum=MOMENTUM, weight_decay=0, nesterov=True)
 
     # Use LR warmup schedule and reduce learning rate on loss plateu
     # warmup = torch.optim.lr_scheduler.LinearLR(optimizer, start_factor=1e-9, end_factor=1, total_iters=warmupEpochs)
@@ -144,6 +149,7 @@ def trainModel(trainingKwargs:dict):
     
     scaler = torch.cuda.amp.GradScaler(enabled=USE_AMP)
     
+    print(f'Training model {MODEL_NAME}')
     # Training loop
     for epoch in range(NUM_EPOCHS):
 
@@ -181,7 +187,7 @@ def trainModel(trainingKwargs:dict):
 
         print(f"Epoch {epoch+1}, Train Loss: {trainLoss/len(trainLoader)}, Validation Loss: {validationLoss/len(trainLoader)}, Train Accuracy: {trainAccuracy}, Validation Accuracy: {valAccuracy}")
 
-        if batchTrainLR < 1e-7:
+        if batchTrainLR < 1e-6:
             print('Learning rate collapsed, ending training!')
             break
 
@@ -207,15 +213,10 @@ def main():
     #######################################
     
     # MAKE SURE I AM TRUE WHEN WE WANT DATA
-    SAVE_STATISTICS = True
+    SAVE_STATISTICS = False
 
-    if not SAVE_STATISTICS:
-        for _ in range(10):
-            print('WARNING: DATA WILL NOT BE SAVED!!!!')
-            time.sleep(0.25)
-
-    BATCH_SIZE = 128
-    NUM_EPOCHS = 15
+    BATCH_SIZE = 32
+    NUM_EPOCHS = 25
     MOMENTUM = 0.9
     LR = 1e-3
     # How much of the dataset to use, 1 for all, 0 for none    
@@ -223,17 +224,17 @@ def main():
 
     dataLoaderKwargs = {
         'batch_size': BATCH_SIZE,
-        'num_workers': 4,
+        'num_workers': 2,
         'prefetch_factor': 1,
         'pin_memory': True
     }
 
 
     # CHANGE ME IF YOU USE A DIFFERENT MODEL PLEASE
-    MODEL_NAME = 'SuperSepNet-Small-Contd'
+    # MODEL_NAME = 'SuperSepNet-Small-Contd'
     # model = superSepNetSmall #VisualizableSWIN()
-    model = torch.load('CollectedData\Models\SuperSepNet-Small-0_Epoch15_Batch128_LR0.001_Momentum0.9')
-    model.to(device)
+    # model = torch.load('CollectedData\Models\SuperSepNet-Small-0_Epoch15_Batch128_LR0.001_Momentum0.9')
+    # model.to(device)
     
     # Validate model will run and profile each layer's computation cost
     # validateModelIO(model)
@@ -243,11 +244,21 @@ def main():
     RUNS_DIR_VALIDATION = r'CollectedData/Runs/Validation'
     MODELS_DIR = r'CollectedData/Models'
 
-    TRAIN_TRANSFORM = v2.Compose([
-            v2.ToImage(),
-            v2.ToDtype(torch.float32, scale=True),
-            v2.Resize((224, 224)),  # Resize images to fit Swin Transformer input dimensions
-        ])
+    randomCenterCrop = v2.RandomApply(transforms=[v2.CenterCrop(150)], p=0.1)
+
+    TRAIN_TRANSFORM_AUG = v2.Compose([
+        v2.Resize((224, 224)),  # Resize images to fit Swin Transformer input dimensions
+        v2.ToImage(), 
+        v2.ToDtype(torch.float32, scale=True),
+        # v2.RandomAdjustSharpness(sharpness_factor=20, p=1),
+        # randomCenterCrop,
+        # v2.GaussianBlur(kernel_size=17, sigma=(2, 2)),
+        v2.RandomHorizontalFlip(),
+        v2.RandomResizedCrop(size=224, scale=(0.7, 1)),
+        v2.RandomGrayscale(p=0.05),
+        v2.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.1, hue=0.02),
+        # v2.Resize((224, 224)), # ENABLE ME IF WE USE CENTER CROP
+    ])
     
     VALTEST_TRANSFORM = v2.Compose([
             v2.ToImage(),
@@ -255,25 +266,111 @@ def main():
             v2.Resize((224, 224)),  # Resize images to fit Swin Transformer input dimensions
         ])
     
-
-    trainingKwargs = {
-        'model': model,
-        'MODEL_NAME': MODEL_NAME,
-        'NUM_EPOCHS': NUM_EPOCHS,
-        'BATCH_SIZE': BATCH_SIZE,
-        'LR': LR,
-        'MOMENTUM': MOMENTUM,
-        'TRAIN_TRANSFORM': TRAIN_TRANSFORM,
-        'VALTEST_TRANSFORM': VALTEST_TRANSFORM,
-        'dataLoaderKwargs': dataLoaderKwargs,
-        'splitFraction': splitFraction,
-        'RUNS_DIR_TRAIN': RUNS_DIR_TRAIN,
-        'RUNS_DIR_VALIDATION': RUNS_DIR_VALIDATION,
-        'MODELS_DIR': MODELS_DIR,
-        'SAVE_STATISTICS': SAVE_STATISTICS
-    }
-
-    trainModel(trainingKwargs=trainingKwargs)
+    
+    
+    BATCH_MODEL_PARAMETERS = [
+        # {
+        #     'model': superSepNetLarge,
+        #     'MODEL_NAME': 'superSepNetLarge-NAdam-Aug',
+        #     'NUM_EPOCHS': NUM_EPOCHS,
+        #     'BATCH_SIZE': BATCH_SIZE,
+        #     'LR': 1e-4,
+        #     'MOMENTUM': MOMENTUM,
+        #     'TRAIN_TRANSFORM': TRAIN_TRANSFORM,
+        #     'VALTEST_TRANSFORM': VALTEST_TRANSFORM,
+        #     'dataLoaderKwargs': dataLoaderKwargs,
+        #     'splitFraction': splitFraction,
+        #     'RUNS_DIR_TRAIN': RUNS_DIR_TRAIN,
+        #     'RUNS_DIR_VALIDATION': RUNS_DIR_VALIDATION,
+        #     'MODELS_DIR': MODELS_DIR,
+        #     'SAVE_STATISTICS': SAVE_STATISTICS
+        # },
+        {
+            'model': customResnet,
+            'MODEL_NAME': 'customResnet-Aug-NAdam',
+            'NUM_EPOCHS': NUM_EPOCHS,
+            'BATCH_SIZE': 4, # For some reason, augmentation eats a TON of VRAM when compared to normal training
+            'LR': 1e-4, # Probably need to start this at 1e-2 or even 5e-2 next time.
+            'MOMENTUM': MOMENTUM,
+            'TRAIN_TRANSFORM': TRAIN_TRANSFORM_AUG,
+            'VALTEST_TRANSFORM': VALTEST_TRANSFORM,
+            'dataLoaderKwargs': dataLoaderKwargs,
+            'splitFraction': splitFraction,
+            'RUNS_DIR_TRAIN': RUNS_DIR_TRAIN,
+            'RUNS_DIR_VALIDATION': RUNS_DIR_VALIDATION,
+            'MODELS_DIR': MODELS_DIR,
+            'SAVE_STATISTICS': SAVE_STATISTICS
+        },
+        # {
+        #     'model': VisualizableVIT(),
+        #     'MODEL_NAME': 'VisualizableVIT',
+        #     'NUM_EPOCHS': NUM_EPOCHS,
+        #     'BATCH_SIZE': BATCH_SIZE,
+        #     'LR': LR,
+        #     'MOMENTUM': MOMENTUM,
+        #     'TRAIN_TRANSFORM': TRAIN_TRANSFORM,
+        #     'VALTEST_TRANSFORM': VALTEST_TRANSFORM,
+        #     'dataLoaderKwargs': dataLoaderKwargs,
+        #     'splitFraction': splitFraction,
+        #     'RUNS_DIR_TRAIN': RUNS_DIR_TRAIN,
+        #     'RUNS_DIR_VALIDATION': RUNS_DIR_VALIDATION,
+        #     'MODELS_DIR': MODELS_DIR,
+        #     'SAVE_STATISTICS': SAVE_STATISTICS
+        # },
+        # {
+        #     'model': VisualizableSWIN(),
+        #     'MODEL_NAME': 'VisualizableSWIN',
+        #     'NUM_EPOCHS': NUM_EPOCHS,
+        #     'BATCH_SIZE': BATCH_SIZE,
+        #     'LR': LR,
+        #     'MOMENTUM': MOMENTUM,
+        #     'TRAIN_TRANSFORM': v2.Compose([
+        #         v2.ToImage(),
+        #         v2.ToDtype(torch.float32, scale=True),
+        #         v2.Resize((256, 256)),  # Resize images to fit Swin Transformer input dimensions
+        #     ]),
+        #     'VALTEST_TRANSFORM': v2.Compose([
+        #         v2.ToImage(),
+        #         v2.ToDtype(torch.float32, scale=True),
+        #         v2.Resize((256, 256)),  # Resize images to fit Swin Transformer input dimensions
+        #     ]),
+        #     'dataLoaderKwargs': dataLoaderKwargs,
+        #     'splitFraction': splitFraction,
+        #     'RUNS_DIR_TRAIN': RUNS_DIR_TRAIN,
+        #     'RUNS_DIR_VALIDATION': RUNS_DIR_VALIDATION,
+        #     'MODELS_DIR': MODELS_DIR,
+        #     'SAVE_STATISTICS': SAVE_STATISTICS
+        # },
+        # {
+        #     'model': torch.load('CollectedData\Models\VisualizableSWIN-0_Epoch25_Batch64_LR0.001_Momentum0.9'),
+        #     'MODEL_NAME': 'VisualizableSWIN-Contd',
+        #     'NUM_EPOCHS': NUM_EPOCHS,
+        #     'BATCH_SIZE': BATCH_SIZE,
+        #     'LR': LR,
+        #     'MOMENTUM': MOMENTUM,
+        #     'TRAIN_TRANSFORM': v2.Compose([
+        #         v2.ToImage(),
+        #         v2.ToDtype(torch.float32, scale=True),
+        #         v2.Resize((256, 256)),  # Resize images to fit Swin Transformer input dimensions
+        #     ]),
+        #     'VALTEST_TRANSFORM': v2.Compose([
+        #         v2.ToImage(),
+        #         v2.ToDtype(torch.float32, scale=True),
+        #         v2.Resize((256, 256)),  # Resize images to fit Swin Transformer input dimensions
+        #     ]),
+        #     'dataLoaderKwargs': dataLoaderKwargs,
+        #     'splitFraction': splitFraction,
+        #     'RUNS_DIR_TRAIN': RUNS_DIR_TRAIN,
+        #     'RUNS_DIR_VALIDATION': RUNS_DIR_VALIDATION,
+        #     'MODELS_DIR': MODELS_DIR,
+        #     'SAVE_STATISTICS': SAVE_STATISTICS
+        # },
+    ]
+    
+    
+    
+    for trainingKwargs in BATCH_MODEL_PARAMETERS:
+        trainModel(trainingKwargs=trainingKwargs)
 
 # Do this because pytorch gets mad when num_workers > 0 and there isn't a main guard
 if __name__ == '__main__':
