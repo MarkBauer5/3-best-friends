@@ -4,6 +4,8 @@ from blocks import *
 from transformers import ViTForImageClassification
 from swin_transformer_v2 import SwinTransformerV2
 from modelUtils import profileModel
+import torchvision.transforms.v2 as v2
+
 # Put predefined model architectures here for training or evaluation
 
 # 92% accuracy after full training
@@ -30,31 +32,31 @@ from modelUtils import profileModel
 # Gets 86.55% on test set
 # TODO: This is pretty sketchy, maybe there's a better way to get this model untrained but I don't know of it.
 # 94.942 Train, 85.945 Val, 86.257 Test 7367s training
-# class VisualizableVIT(nn.Module):
-#     def __init__(self):
-#         super().__init__()
+class VisualizableVIT(nn.Module):
+    def __init__(self):
+        super().__init__()
         
-#         _visualizableVIT = ViTForImageClassification.from_pretrained('facebook/deit-base-patch16-224', return_dict=False)
+        _visualizableVIT = ViTForImageClassification.from_pretrained('facebook/deit-base-patch16-224', return_dict=False)
 
-#         # Clear the weights since I have no idea how to get just the architecture without weights
-#         for layer in _visualizableVIT.children():
-#             layer.apply(_visualizableVIT._init_weights)
+        # Clear the weights since I have no idea how to get just the architecture without weights
+        for layer in _visualizableVIT.children():
+            layer.apply(_visualizableVIT._init_weights)
         
-#         self.vit = _visualizableVIT
-#         self.classifier = nn.Sequential(
-#             nn.LayerNorm(normalized_shape=1000),
-#             nn.ReLU(),
+        self.vit = _visualizableVIT
+        self.classifier = nn.Sequential(
+            nn.LayerNorm(normalized_shape=1000),
+            nn.ReLU(),
             
-#             nn.Linear(1000, 256),
-#             nn.LayerNorm(normalized_shape=256),
-#             nn.ReLU(),
+            nn.Linear(1000, 256),
+            nn.LayerNorm(normalized_shape=256),
+            nn.ReLU(),
             
-#             nn.Linear(256, 2),
-#         )
+            nn.Linear(256, 2),
+        )
         
-#     def forward(self, x):
-#         rawOutput = self.vit(x)[0]
-#         return self.classifier(rawOutput)
+    def forward(self, x):
+        rawOutput = self.vit(x)[0]
+        return self.classifier(rawOutput)
 
 
 # 93.73% Test 94.06% Validation
@@ -544,7 +546,7 @@ customResnet = nn.Sequential(
     nn.AdaptiveAvgPool2d(1),
     nn.Flatten(),
     
-    nn.Linear(in_features=2048, out_features=2048),
+    nn.Linear(in_features=4096, out_features=2048),
     nn.ReLU(),
     nn.LayerNorm(normalized_shape=2048),
     
@@ -618,51 +620,51 @@ customResnet = nn.Sequential(
 # 99.963 Train, 88.85 Val, 89.485 Test
 # Need to cut batch size to 32 with augmentations because they use too much memory lole
 # ABSOLUTELY GOATED WITH AUGS 98.65|96.74|96.64 TAKES FOREVER TO TRAIN: 16189s
-# superSepNetLarge = nn.Sequential(
-#     DoubleResidualDWSeparableConv2d(in_channels=3, out_channels=18),
-#     ResidualDownsampleSep(in_channels=18), # 112
+superSepNetLarge = nn.Sequential(
+    DoubleResidualDWSeparableConv2d(in_channels=3, out_channels=18),
+    ResidualDownsampleSep(in_channels=18), # 112
     
-#     DoubleResidualDWSeparableConv2d(in_channels=18, out_channels=36),
-#     ResidualDownsampleSep(in_channels=36), # 56
+    DoubleResidualDWSeparableConv2d(in_channels=18, out_channels=36),
+    ResidualDownsampleSep(in_channels=36), # 56
     
-#     DoubleResidualDWSeparableConv2d(in_channels=36, out_channels=72),
-#     ResidualDownsampleSep(in_channels=72), # 28
+    DoubleResidualDWSeparableConv2d(in_channels=36, out_channels=72),
+    ResidualDownsampleSep(in_channels=72), # 28
     
-#     DoubleResidualDWSeparableConv2d(in_channels=72, out_channels=144),
-#     ResidualDownsampleSep(in_channels=144), # 14
+    DoubleResidualDWSeparableConv2d(in_channels=72, out_channels=144),
+    ResidualDownsampleSep(in_channels=144), # 14
 
-#     DoubleResidualDWSeparableConv2d(in_channels=144, out_channels=288),
-#     ResidualDownsampleSep(in_channels=288), # 7
+    DoubleResidualDWSeparableConv2d(in_channels=144, out_channels=288),
+    ResidualDownsampleSep(in_channels=288), # 7
     
-#     DoubleResidualDWSeparableConv2d(in_channels=288, out_channels=576),
-#     ResidualDownsampleSep(in_channels=576), # 3
+    DoubleResidualDWSeparableConv2d(in_channels=288, out_channels=576),
+    ResidualDownsampleSep(in_channels=576), # 3
 
-#     DoubleResidualDWSeparableConv2d(in_channels=576, out_channels=1152),
-#     *[DoubleResidualDWSeparableConv2d(in_channels=1152, out_channels=1152) for _ in range(6)],
+    DoubleResidualDWSeparableConv2d(in_channels=576, out_channels=1152),
+    *[DoubleResidualDWSeparableConv2d(in_channels=1152, out_channels=1152) for _ in range(6)],
 
-#     DoubleResidualDWSeparableConv2d(in_channels=1152, out_channels=2304),
-#     *[DoubleResidualDWSeparableConv2d(in_channels=2304, out_channels=2304) for _ in range(6)],
+    DoubleResidualDWSeparableConv2d(in_channels=1152, out_channels=2304),
+    *[DoubleResidualDWSeparableConv2d(in_channels=2304, out_channels=2304) for _ in range(6)],
 
-#     DoubleResidualDWSeparableConv2d(in_channels=2304, out_channels=4608),
-#     *[DoubleResidualDWSeparableConv2d(in_channels=4608, out_channels=4608) for _ in range(8)],
+    DoubleResidualDWSeparableConv2d(in_channels=2304, out_channels=4608),
+    *[DoubleResidualDWSeparableConv2d(in_channels=4608, out_channels=4608) for _ in range(8)],
 
-#     nn.AdaptiveAvgPool2d(1),
-#     nn.Flatten(),
+    nn.AdaptiveAvgPool2d(1),
+    nn.Flatten(),
     
-#     nn.Linear(in_features=4608, out_features=2304),
-#     nn.LayerNorm(normalized_shape=2304),
-#     nn.GELU(),
+    nn.Linear(in_features=4608, out_features=2304),
+    nn.LayerNorm(normalized_shape=2304),
+    nn.GELU(),
 
-#     nn.Linear(in_features=2304, out_features=1152),
-#     nn.LayerNorm(normalized_shape=1152),
-#     nn.GELU(),
+    nn.Linear(in_features=2304, out_features=1152),
+    nn.LayerNorm(normalized_shape=1152),
+    nn.GELU(),
 
-#     nn.Linear(in_features=1152, out_features=512),
-#     nn.LayerNorm(normalized_shape=512),
-#     nn.GELU(),
+    nn.Linear(in_features=1152, out_features=512),
+    nn.LayerNorm(normalized_shape=512),
+    nn.GELU(),
 
-#     nn.Linear(in_features=512, out_features=2),
-# )
+    nn.Linear(in_features=512, out_features=2),
+)
 
 
 def main():
@@ -670,17 +672,27 @@ def main():
     # Test model loading here
     # customModel = VisualizableSWIN()
     # customModel = VisualizableVIT() # Can't profile this one
-    customModel = None
-    input_size = (64, 3, 224, 224)
+    customModel = customResnet
+    input_size = (32, 3, 224, 224)
     profileModel(customModel, input_size=input_size)
     
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     
     customModel.to(device)
     
+    TRAIN_TRANSFORM_AUG = v2.Compose([
+        v2.Resize((224, 224)),  # Resize images to fit Swin Transformer input dimensions
+        v2.ToImage(), 
+        v2.ToDtype(torch.float32, scale=True),
+        v2.RandomHorizontalFlip(),
+        v2.RandomResizedCrop(size=224, scale=(0.7, 1)),
+        v2.RandomGrayscale(p=0.05),
+        v2.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.1, hue=0.02),
+    ])
+    
     dummyInput = torch.randn((input_size)).to(device)
     
-    out = customModel(dummyInput)
+    out = customModel(TRAIN_TRANSFORM_AUG(dummyInput))
     # print(out)
     print(f'{out.shape=}')
     

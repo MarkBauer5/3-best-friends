@@ -246,18 +246,19 @@ def main():
 
     randomCenterCrop = v2.RandomApply(transforms=[v2.CenterCrop(150)], p=0.1)
 
+        # v2.RandomAdjustSharpness(sharpness_factor=20, p=1),
+        # randomCenterCrop,
+        # v2.GaussianBlur(kernel_size=17, sigma=(2, 2)),
+        # v2.Resize((224, 224)), # ENABLE ME IF WE USE CENTER CROP
+
     TRAIN_TRANSFORM_AUG = v2.Compose([
         v2.Resize((224, 224)),  # Resize images to fit Swin Transformer input dimensions
         v2.ToImage(), 
         v2.ToDtype(torch.float32, scale=True),
-        # v2.RandomAdjustSharpness(sharpness_factor=20, p=1),
-        # randomCenterCrop,
-        # v2.GaussianBlur(kernel_size=17, sigma=(2, 2)),
         v2.RandomHorizontalFlip(),
         v2.RandomResizedCrop(size=224, scale=(0.7, 1)),
         v2.RandomGrayscale(p=0.05),
         v2.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.1, hue=0.02),
-        # v2.Resize((224, 224)), # ENABLE ME IF WE USE CENTER CROP
     ])
     
     VALTEST_TRANSFORM = v2.Compose([

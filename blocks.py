@@ -274,7 +274,7 @@ class ResidualDWSeparableConv2d(nn.Module):
 class DoubleDepthwiseSeparableConv2d(nn.Module):
     
     """
-    Implements depthwise-pointwise convolution for faster performance. I think this was used in EfficientNet
+    Implements separable depthwise-pointwise convolution for faster performance. I think this was used in EfficientNet
     https://www.youtube.com/watch?v=vVaRhZXovbw&list=WL&index=44
     
     This Double separable version separates into both vertical and horizontal convolutions for max efficiency
@@ -294,11 +294,11 @@ class DoubleDepthwiseSeparableConv2d(nn.Module):
         self.depthwise = nn.Sequential(
             nn.Conv2d(in_channels=in_channels, out_channels=in_channels, 
                     kernel_size=(kernel_size, 1), stride=stride, padding=padding, groups=in_channels, bias=False),
-            # self.activation,
+            # self.activation, # <== Having these hurts performance! Just like the paper said!
             nn.Conv2d(in_channels=in_channels, out_channels=out_channels, 
                     kernel_size=(1, kernel_size), stride=stride, padding=padding, groups=in_channels, bias=False),
             nn.BatchNorm2d(num_features=out_channels),
-            # self.activation,
+            # self.activation, # <== Having these hurts performance! Just like the paper said!
         )
         
         self.pointwise = nn.Sequential(
@@ -315,6 +315,10 @@ class DoubleDepthwiseSeparableConv2d(nn.Module):
         
 class DoubleResidualDWSeparableConv2d(nn.Module):
     
+    """
+    Defines a residual double separable convolution
+    """
+    
     def __init__(self, in_channels, out_channels, activation:nn.Module=nn.GELU(), kernel_size:int=3):
         super(DoubleResidualDWSeparableConv2d, self).__init__()
         
@@ -325,7 +329,7 @@ class DoubleResidualDWSeparableConv2d(nn.Module):
         
         self.outNorm = nn.BatchNorm2d(num_features=out_channels)
 
-        # If in channels neq out channels, pass through a 1x1 convolution to change channel count. Sizes must be the same still!
+        # If in channels != out channels, pass through a 1x1 convolution to change channel count. Sizes must be the same still!
         if in_channels != out_channels:
             self.residualLayer = nn.Sequential(
                 nn.Conv2d(in_channels=in_channels, out_channels=out_channels, kernel_size=1, bias=False),

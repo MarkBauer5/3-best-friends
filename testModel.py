@@ -2,6 +2,7 @@ import torch
 from torch.utils.data import DataLoader
 from modelUtils import getDataLoaders
 from torch import nn
+import torchvision.transforms.v2 as v2
 
 from tqdm import tqdm
 
@@ -53,10 +54,10 @@ def main():
         return running_loss, accuracy
 
 
-
-    model = torch.load(r'CollectedData\Models\visualizableVIT-0_Epoch25_Batch64_LR0.001_Momentum0.9')
-
-    print(model)
+    # model, IM_SIZE = torch.load(r'CollectedData\Models\customResnet-Aug-0_Epoch25_Batch1_LR0.001_Momentum0.9'), (224, 224) # RCNN
+    # model, IM_SIZE = torch.load(r'CollectedData\Models\superSepNetLarge-NAdam-Aug-0_Epoch25_Batch32_LR0.0001_Momentum0.9'), (224, 224) # SepNet
+    model, IM_SIZE = torch.load(r'CollectedData\Models\VisualizableVIT-0_Epoch25_Batch64_LR0.001_Momentum0.9'), (224, 224) # ViT
+    # model, IM_SIZE = torch.load(r'CollectedData\Models\VisualizableSWIN-Contd-0_Epoch25_Batch32_LR0.001_Momentum0.9'), (256, 256) # SWIN
 
     dataLoaderKwargs = {
         'batch_size': 32,
@@ -65,11 +66,36 @@ def main():
         'pin_memory': True
     }
 
-    _, _, testDataloader = getDataLoaders(dataLoaderKwargs=dataLoaderKwargs)
+
+    TRAIN_TRANSFORM_AUG = v2.Compose([
+        v2.Resize(IM_SIZE),  # Resize images to fit Swin Transformer input dimensions
+        v2.ToImage(), 
+        v2.ToDtype(torch.float32, scale=True),
+        v2.RandomHorizontalFlip(),
+        v2.RandomResizedCrop(size=224, scale=(0.7, 1)),
+        v2.RandomGrayscale(p=0.05),
+        v2.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.1, hue=0.02),
+    ])
+    
+    randomCenterCrop = v2.RandomApply(transforms=[v2.CenterCrop(160)], p=1)
+
+    VALTEST_TRANSFORM = v2.Compose([
+            v2.Resize(IM_SIZE),  # Resize images to fit Swin Transformer input dimensions
+            v2.ToImage(),
+            v2.ToDtype(torch.float32, scale=True),
+            # randomCenterCrop,
+            v2.Resize(IM_SIZE),  # Resize images to fit Swin Transformer input dimensions
+            # v2.RandomGrayscale(p=1),
+            # v2.ColorJitter(brightness=0.0, contrast=0.0, saturation=0.0, hue=0.2),
+            # v2.GaussianBlur(kernel_size=17, sigma=(1, 1)),
+            v2.RandomAdjustSharpness(sharpness_factor=10, p=1),
+        ])
+
+    _, _, testDataloader = getDataLoaders(dataLoaderKwargs=dataLoaderKwargs, trainTransform=TRAIN_TRANSFORM_AUG, valTestTransform=VALTEST_TRANSFORM)
 
     runningLoss, accuracy = testEpoch(model, testDataloader)
     
-    print(f'Finished with accuracy of {accuracy}')
+    print(f'Finished with accuracy of {round(accuracy,4)*100}%')
     
     
 # Do this because pytorch gets mad when num_workers > 0 and there isn't a main guard
