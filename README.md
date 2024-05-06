@@ -1,5 +1,5 @@
 # Deep Learning to identify AI generated images
-Task: Using Deep Learning to identify AI generated images
+Task: Using Deep Learning to Develop Explainable Models for Detection of AI generated images
 
 ## Repository Structure
 README.md: Overview of the project
