@@ -20,3 +20,5 @@ vit_xai.py: Explainability code for ViT with GradCam
 
 cnn_xai.py: Explainability code for CNN with GradCam
 
+## Trained Models
+The trained models can be found in the following link: [Trained Models](https://drive.google.com/drive/folders/1M4pZIkd9ctpEjZeOEp4uwB1Oow6niAY7?usp=sharing)
