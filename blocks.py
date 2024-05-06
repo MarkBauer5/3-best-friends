@@ -4,7 +4,7 @@ import torch
 
 
 """
-Yoinked straight from my CS 444 final project lole
+Yoinked straight from my CS 444 final project lol
 
 Define custom architecture blocks here
 """

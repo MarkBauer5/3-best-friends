@@ -63,7 +63,7 @@ def reshape_transform(tensor, height=7, width=7):
 
 
 if __name__ == '__main__':
-    """ python swinT_example.py -image-path <path_to_image>
+    """ python swinT_xai.py -image-path <path_to_image>
     Example usage of using cam-methods on a SwinTransformers network.
 
     """

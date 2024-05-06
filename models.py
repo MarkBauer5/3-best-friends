@@ -113,13 +113,6 @@ from modelUtils import profileModel
 #         return self.model(x)
 
 
-
-
-
-
-
-
-
 # First CNN I pretty much copy pasted from my CS 444 project
 # NOT TESTED
 # 49M Params
@@ -562,7 +555,7 @@ from modelUtils import profileModel
 #     nn.Linear(in_features=512, out_features=2),
 # )
 
-# Runs like twice as fast as previous ResNet, but looks like it will have worse performance# Also only uses 9.2 GB when compared to the 22 GB from ResNet 
+# Runs like twice as fast as previous ResNet, but looks like it will have worse performance# Also only uses 9.2 GB when compared to the 22 GB from ResNet
 # TODO: Continue training this later, seems to not have fully fit yet.
 # After 15 epochs: Train: 92.414%, Val: 81.015%, Test: 81.035%
 superSepNetSmall = nn.Sequential(
