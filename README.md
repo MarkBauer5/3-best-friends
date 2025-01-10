@@ -4,6 +4,8 @@ Task: Using Deep Learning to Develop Explainable Models for Detection of AI gene
 
 With the ever growing capabilities of generative AI, it can be hard to tell truth from fiction, as deep-fake images and videos become more realistic and prevalent. To help solve this problem in an explainable way, we implement a series of deep learning models capable of identifying AI generated from real human faces and utilized the GradCAM library to visualize what parts of an AI image to look for when trying to find these deep-fake images. Our models proved quite effective, achieving nearly 97% accuracy on the test set.
 
+Read our full report [here](https://github.com/MarkBauer5/3-best-friends/blob/4f6144555dde32005fd644ffa64649bc854c5c6b/Project%20Report-compressed_1.pdf)!
+
 ## Model Architectures
 
 In addition to more popular transformer-based architectures like [SWIN](https://arxiv.org/abs/2103.14030) and [ViT](https://arxiv.org/abs/2010.11929), we implement a variety of CNN-based architectures and optimizations that seek to make these more traditional model types competitive with their more modern counterparts.
